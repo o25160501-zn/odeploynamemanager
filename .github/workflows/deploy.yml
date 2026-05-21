@@ -49,7 +49,7 @@ jobs:
     if: >-
       (github.event_name == 'workflow_dispatch')
       ||
-      (github.event_name == 'push' && github.repository == 'o861cloudflare/odeploynamemanager')
+      (github.event_name == 'push' && github.repository == 'o25160501-zn/odeploynamemanager')
       ||
       (github.event_name == 'push' && github.repository == 'o861cloudflare/odeploynamemanager-2')
       || 

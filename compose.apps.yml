@@ -1,12 +1,13 @@
 # ================================================================
 #  compose.apps.yml — Application Layer
-#  Builds the bundled sample app from ./services/app
+#  Builds domain-register-app (Next.js) từ ./services/app
 #
 #  Subdomain: ${PROJECT_NAME}.${DOMAIN}
 #
 #  Minimal required env:
-#    APP_PORT   — Port app listens on inside container
+#    APP_PORT   — Port app listens on inside container (default 3000)
 #    PROJECT_NAME, DOMAIN, CADDY_EMAIL, TINYAUTH_*, LITESTREAM_*
+#    NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_FIREBASE_*  — Firebase config (build args)
 # ================================================================
 
 services:
@@ -16,6 +17,17 @@ services:
     build:
       context: ./services/app
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_FIREBASE_API_KEY: "${NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_FIREBASE_API_KEY}"
+        NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_FIREBASE_AUTH_DOMAIN: "${NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_FIREBASE_AUTH_DOMAIN}"
+        NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_FIREBASE_PROJECT_ID: "${NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_FIREBASE_PROJECT_ID}"
+        NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_FIREBASE_DATABASE_URL: "${NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_FIREBASE_DATABASE_URL}"
+        NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_FIREBASE_STORAGE_BUCKET: "${NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_FIREBASE_STORAGE_BUCKET}"
+        NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_FIREBASE_MESSAGING_SENDER_ID: "${NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_FIREBASE_MESSAGING_SENDER_ID}"
+        NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_FIREBASE_APP_ID: "${NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_FIREBASE_APP_ID}"
+        NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_ENCRYPT_SALT: "${NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_ENCRYPT_SALT}"
+        DPDNS_CLOUDFLARED_MANAGER_BACKEND_API_SECRET_KEY: "${DPDNS_CLOUDFLARED_MANAGER_BACKEND_API_SECRET_KEY}"
+        NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_ALLOWED_EMAILS: "${NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_ALLOWED_EMAILS:-}"
     # Compose vẫn ưu tiên giá trị khai báo explicit trong environment bên dưới.
     env_file:
       - ./.env
@@ -26,7 +38,7 @@ services:
       - "127.0.0.1:${APP_HOST_PORT:-3000}:${APP_PORT:-3000}"
     volumes:
       - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/app/logs:/app/logs
-      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/app/data:/app/data
+      - ./services/app/-gitignore:/app/-gitignore:ro
     labels:
       # Public HTTP sites behind Cloudflare Tunnel.
       - "caddy=http://${PROJECT_NAME}.${DOMAIN}, http://main.${DOMAIN}, http://${DOMAIN}, http://${PROJECT_NAME_TAILSCALE}.${TAILSCALE_TAILNET_DOMAIN}"
@@ -53,8 +65,8 @@ services:
         - "CMD"
         - "sh"
         - "-c"
-        - "wget -qO- http://localhost:${APP_PORT:-3000}${HEALTH_PATH:-/health} || exit 1"
+        - "wget -qO- http://127.0.0.1:${APP_PORT:-3000}${HEALTH_PATH:-/} || exit 1"
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 30s

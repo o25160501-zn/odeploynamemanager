@@ -38,29 +38,15 @@ services:
   tinyauth:
     container_name: "tinyauth"
     image: ghcr.io/steveiliop56/tinyauth:v5
-    env_file:
-      - ./.env
-    environment:
-      APP_URL: "${TINYAUTH_APP_URL:-http://auth.${DOMAIN}}"
-      SECRET: "${TINYAUTH_SECRET:-change-me-generate-a-long-random-secret}"
-      USERS: "${TINYAUTH_USERS:-admin:changeme}"
-      OAUTH_AUTO_REDIRECT: "${TINYAUTH_OAUTH_AUTO_REDIRECT:-none}"
-      DISABLE_CONTINUE: "${TINYAUTH_DISABLE_CONTINUE:-false}"
-      COOKIE_SECURE: "${TINYAUTH_COOKIE_SECURE:-true}"
-      TRUST_PROXY: "${TINYAUTH_TRUST_PROXY:-true}"
-      LOG_LEVEL: "${TINYAUTH_LOG_LEVEL:-info}"
-      GOOGLE_CLIENT_ID: "${TINYAUTH_GOOGLE_CLIENT_ID:-}"
-      GOOGLE_CLIENT_SECRET: "${TINYAUTH_GOOGLE_CLIENT_SECRET:-}"
-      GITHUB_CLIENT_ID: "${TINYAUTH_GITHUB_CLIENT_ID:-}"
-      GITHUB_CLIENT_SECRET: "${TINYAUTH_GITHUB_CLIENT_SECRET:-}"
-      OIDC_ISSUER: "${TINYAUTH_OIDC_ISSUER:-}"
-      OIDC_CLIENT_ID: "${TINYAUTH_OIDC_CLIENT_ID:-}"
-      OIDC_CLIENT_SECRET: "${TINYAUTH_OIDC_CLIENT_SECRET:-}"
-      OIDC_SCOPES: "${TINYAUTH_OIDC_SCOPES:-openid email profile}"
-      ALLOWED_USERS: "${TINYAUTH_ALLOWED_USERS:-}"
-      ALLOWED_DOMAINS: "${TINYAUTH_ALLOWED_DOMAINS:-}"
-      ALLOWED_GROUPS: "${TINYAUTH_ALLOWED_GROUPS:-}"
-      DATABASE_URL: "sqlite:////data/${TINYAUTH_DB_FILE:-tinyauth.db}"
+    command:
+      - "--appurl=${TINYAUTH_APP_URL:-http://auth.${DOMAIN}}"
+      - "--server.port=${TINYAUTH_PORT:-3000}"
+      - "--database.path=/data/${TINYAUTH_DB_FILE:-tinyauth.db}"
+      - "--auth.users=${TINYAUTH_USERS:-admin:changeme}"
+      - "--auth.securecookie=${TINYAUTH_COOKIE_SECURE:-true}"
+      - "--oauth.autoredirect=${TINYAUTH_OAUTH_AUTO_REDIRECT:-none}"
+      - "--oauth.whitelist=${TINYAUTH_ALLOWED_DOMAINS:-}"
+      - "--log.level=${TINYAUTH_LOG_LEVEL:-info}"
     volumes:
       - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/tinyauth:/data
     labels:

@@ -1,0 +1,82 @@
+@baseUrl = http://localhost:3000
+@secretKey = dreg_sec_key_bfd38c6426d0344d5c80ef148aa07cd2
+
+# NOTE: Thay thế giá trị test-user-uid bên dưới bằng User ID (UID) thực tế 
+# lấy từ tab Credentials Manager trong Settings của ứng dụng để hiển thị được trên UI.
+@userId = DAYAVs66oXM7RS30Qqpsii10LWI3
+
+### 1. Test DPDNS Account Creation (Unauthorized - Missing Key)
+POST {{baseUrl}}/api/accounts
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "service": "dpdns",
+  "name": "Third-Party DPDNS",
+  "email": "test-unauth@example.com",
+  "token": "some-token"
+}
+
+### 2. Test DPDNS Account Creation (Unauthorized - Wrong Key)
+POST {{baseUrl}}/api/accounts
+Authorization: Bearer wrong_secret_key_here
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "service": "dpdns",
+  "name": "Third-Party DPDNS",
+  "email": "test-unauth@example.com",
+  "token": "some-token"
+}
+
+### 3. Test DPDNS Account Creation (Success)
+POST {{baseUrl}}/api/accounts
+Authorization: Bearer {{secretKey}}
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "service": "dpdns",
+  "name": "Integration DPDNS",
+  "email": "cf-test@example.com",
+  "token": "dpdns_token_abc123"
+}
+
+### 4. Test Cloudflare Account Creation (Success)
+POST {{baseUrl}}/api/accounts
+Authorization: Bearer {{secretKey}}
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "service": "cloudflare",
+  "name": "Integration Cloudflare",
+  "email": "cf-test@example.com",
+  "apiKey": "cloudflare_api_key_xyz",
+  "accountId": "cf_account_id_789"
+}
+
+### 5. Test Cloudflare Account Update (Same Email, updates credentials)
+POST {{baseUrl}}/api/accounts
+Authorization: Bearer {{secretKey}}
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "service": "cloudflare",
+  "name": "Integration Cloudflare Updated",
+  "email": "cf-test@example.com",
+  "apiKey": "new_cloudflare_api_key_xyz_updated",
+  "accountId": "cf_account_id_789_updated"
+}
+
+### 6. Test Account Creation (Missing Fields - Bad Request)
+POST {{baseUrl}}/api/accounts
+Authorization: Bearer {{secretKey}}
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "service": "dpdns"
+}

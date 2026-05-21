@@ -1,0 +1,19 @@
+tunnel: 70928f98-a69d-45c9-b854-cf98db2a591a
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  - hostname: odeploynamemanager.dpdns.org
+    service: http://caddy:80
+  - hostname: main.odeploynamemanager.dpdns.org
+    service: http://caddy:80
+  - hostname: ttyd.odeploynamemanager.dpdns.org
+    service: http://caddy:80
+  - hostname: dozzle.odeploynamemanager.dpdns.org
+    service: http://caddy:80
+  - hostname: files.odeploynamemanager.dpdns.org
+    service: http://caddy:80
+  - hostname: deploy.odeploynamemanager.dpdns.org
+    service: http://caddy:80
+  - hostname: auth.odeploynamemanager.dpdns.org
+    service: http://caddy:80
+  - service: http_status:404
