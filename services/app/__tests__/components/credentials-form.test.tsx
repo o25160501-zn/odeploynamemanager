@@ -1,0 +1,64 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { CredentialsForm } from '@/components/credentials/CredentialsForm';
+import { CloudflareService } from '@/services/cloudflare.service';
+import { CredentialsService } from '@/services/credentials.service';
+import { DPDNSService } from '@/services/dpdns.service';
+import { useAppStore } from '@/stores/app.store';
+
+vi.mock('@/services/dpdns.service', () => ({ DPDNSService: { listDomains: vi.fn() } }));
+vi.mock('@/services/cloudflare.service', () => ({ CloudflareService: { verifyCredentials: vi.fn(), resolveAccountId: vi.fn() } }));
+vi.mock('@/services/credentials.service', () => ({ CredentialsService: { save: vi.fn(), load: vi.fn() } }));
+vi.mock('@/components/feedback/FloatMessageProvider', () => ({ useFloatMessage: () => ({ notifySuccess: vi.fn(), notifyError: vi.fn() }) }));
+
+const initialState = useAppStore.getState();
+
+describe('CredentialsForm', () => {
+  beforeEach(() => {
+    useAppStore.setState({ authReady: true, user: { uid: 'uid-1' } as never, accounts: [], domains: [] });
+    vi.mocked(DPDNSService.listDomains).mockResolvedValue({ success: true, data: [] });
+    vi.mocked(CloudflareService.verifyCredentials).mockResolvedValue({ success: true, result: { id: 'user-1', email: 'user@example.com' } });
+    vi.mocked(CloudflareService.resolveAccountId).mockResolvedValue('account-id');
+    vi.mocked(CredentialsService.save).mockResolvedValue('acc-1' as any);
+  });
+
+  it('tests and saves credentials after validating both providers', async () => {
+    render(<CredentialsForm />);
+
+    // Click Add Account first to enter the add mode form
+    fireEvent.click(screen.getAllByRole('button', { name: /Add Account/i })[0]);
+
+    fireEvent.change(screen.getByPlaceholderText('e.g. Personal DPDNS Account'), { target: { value: 'Test Account' } });
+    fireEvent.change(screen.getByPlaceholderText('dp_live_xxxxx'), { target: { value: 'dp-token' } });
+    fireEvent.change(screen.getByPlaceholderText('user@example.com'), { target: { value: 'user@example.com' } });
+    fireEvent.change(screen.getByPlaceholderText('Auto-detect if blank'), { target: { value: 'account-id' } });
+    fireEvent.change(screen.getByPlaceholderText('37-character global API key'), { target: { value: 'a'.repeat(37) } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save & Test →' }));
+
+    await waitFor(() => expect(DPDNSService.listDomains).toHaveBeenCalledWith('dp-token'));
+    expect(CloudflareService.verifyCredentials).toHaveBeenCalledWith('user@example.com', 'a'.repeat(37));
+    expect(CredentialsService.save).toHaveBeenCalledWith('uid-1', {
+      id: '',
+      name: 'Test Account',
+      dpdnsToken: 'dp-token',
+      cloudflareEmail: 'user@example.com',
+      cloudflareApiKey: 'a'.repeat(37),
+      cloudflareAccountId: 'account-id',
+      dpdnsVerified: true,
+      cloudflareVerified: true,
+    }, { dpdns: true, cloudflare: true });
+  });
+
+  it('can test only DPDNS token connectivity', async () => {
+    render(<CredentialsForm />);
+
+    // Click Add Account first to enter the add mode form
+    fireEvent.click(screen.getAllByRole('button', { name: /Add Account/i })[0]);
+
+    fireEvent.change(screen.getByPlaceholderText('dp_live_xxxxx'), { target: { value: 'dp-token' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Test Connection' }));
+
+    await waitFor(() => expect(DPDNSService.listDomains).toHaveBeenCalledWith('dp-token'));
+    expect(await screen.findByText('DPDNS connected successfully.')).toBeInTheDocument();
+  });
+});

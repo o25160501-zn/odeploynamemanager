@@ -1,6 +1,7 @@
 project-api.http
 *credentials.json
 -gitignore/**
+
 # ── Secrets (NEVER commit) ───────────────────────────────────────
 .env
 .env.local
@@ -24,6 +25,7 @@ yarn-error.log*
 pnpm-debug.log*
 package-lock.json
 !services/deploy-code/package-lock.json
+!services/app/package-lock.json
 yarn.lock
 pnpm-lock.yaml
 .pnpm-store/
@@ -74,38 +76,6 @@ coverage/
 # Runtime / temp
 logs/
 
-# ── .NET / C# ────────────────────────────────────────
-bin/
-obj/
-publish/
-*.userosscache
-*.sln.docstates
-
-# NuGet
-*.nupkg
-*.snupkg
-.nuget/
-packages/
-project.lock.json
-project.assets.json
-*.nuget.props
-*.nuget.targets
-
-# Visual Studio / Rider
-.vs/
-_ReSharper*/
-*.[Rr]e[Ss]harper
-*.DotSettings.user
-
-# Test results
-TestResults/
-[Tt]est[Rr]esult*/
-[Bb]uild[Ll]og.*
-
-# Publish profiles
-**/Properties/PublishProfiles/*.pubxml
-!**/Properties/PublishProfiles/*.pubxml.user
-
 # ── Shared ────────────────────────────────────────────
 # Env & secrets
 appsettings.Development.json
@@ -118,9 +88,9 @@ secrets.json
 
 # ── Git O-Alias helpers ───────────────────────
 .git-o-config
-env-docker-stack-template-default-rtdb-tailscale-keep-ip-export.json
 
 # ── Node.js ──────────────────────────────────────────
+
 
 # Build output (Node)
 
