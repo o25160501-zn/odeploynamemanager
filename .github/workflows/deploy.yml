@@ -77,29 +77,29 @@ jobs:
       ||
       (github.event_name == 'schedule' && github.event.schedule == '3 11 * * *' && github.repository == 'othau2712-xo/odeploynamemanager')
       ||
-      (github.event_name == 'schedule' && github.event.schedule == '3 12 * * *' && github.repository == 'hauo8627/odeploynamemanager')
+      (github.event_name == 'schedule' && github.event.schedule == '3 12 * * *' && github.repository == 'othau2712-xo/odeploynamemanager')
       ||
-      (github.event_name == 'schedule' && github.event.schedule == '3 13 * * *' && github.repository == 'hauo8627/odeploynamemanager')
+      (github.event_name == 'schedule' && github.event.schedule == '3 13 * * *' && github.repository == 'othau2712-xo/odeploynamemanager')
       ||
-      (github.event_name == 'schedule' && github.event.schedule == '3 14 * * *' && github.repository == 'hauo8627/odeploynamemanager')
+      (github.event_name == 'schedule' && github.event.schedule == '3 14 * * *' && github.repository == 'othau2712-xo/odeploynamemanager')
       ||
-      (github.event_name == 'schedule' && github.event.schedule == '3 15 * * *' && github.repository == 'hauo8627/odeploynamemanager')
+      (github.event_name == 'schedule' && github.event.schedule == '3 15 * * *' && github.repository == 'othau2712-xo/odeploynamemanager')
       ||
-      (github.event_name == 'schedule' && github.event.schedule == '3 16 * * *' && github.repository == 'hauo8627/odeploynamemanager')
+      (github.event_name == 'schedule' && github.event.schedule == '3 16 * * *' && github.repository == 'othau2712-xo/odeploynamemanager')
       ||
-      (github.event_name == 'schedule' && github.event.schedule == '3 17 * * *' && github.repository == 'hauo8627/odeploynamemanager')
+      (github.event_name == 'schedule' && github.event.schedule == '3 17 * * *' && github.repository == 'othau2712-xo/odeploynamemanager')
       ||
-      (github.event_name == 'schedule' && github.event.schedule == '3 18 * * *' && github.repository == 'hauo8627/odeploynamemanager')
+      (github.event_name == 'schedule' && github.event.schedule == '3 18 * * *' && github.repository == 'othau2712-xo/odeploynamemanager')
       ||
-      (github.event_name == 'schedule' && github.event.schedule == '3 19 * * *' && github.repository == 'hauo8627/odeploynamemanager')
+      (github.event_name == 'schedule' && github.event.schedule == '3 19 * * *' && github.repository == 'othau2712-xo/odeploynamemanager')
       ||
-      (github.event_name == 'schedule' && github.event.schedule == '3 20 * * *' && github.repository == 'hauo8627/odeploynamemanager')
+      (github.event_name == 'schedule' && github.event.schedule == '3 20 * * *' && github.repository == 'othau2712-xo/odeploynamemanager')
       ||
-      (github.event_name == 'schedule' && github.event.schedule == '3 21 * * *' && github.repository == 'hauo8627/odeploynamemanager')
+      (github.event_name == 'schedule' && github.event.schedule == '3 21 * * *' && github.repository == 'othau2712-xo/odeploynamemanager')
       ||
-      (github.event_name == 'schedule' && github.event.schedule == '3 22 * * *' && github.repository == 'hauo8627/odeploynamemanager')
+      (github.event_name == 'schedule' && github.event.schedule == '3 22 * * *' && github.repository == 'othau2712-xo/odeploynamemanager')
       ||
-      (github.event_name == 'schedule' && github.event.schedule == '3 23 * * *' && github.repository == 'hauo8627/odeploynamemanager')
+      (github.event_name == 'schedule' && github.event.schedule == '3 23 * * *' && github.repository == 'othau2712-xo/odeploynamemanager')
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/runs
