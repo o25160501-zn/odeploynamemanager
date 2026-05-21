@@ -272,7 +272,7 @@ TAILSCALE_KEEP_IP_FIREBASE_URL=${DOTENVRTDB_ROOT_URL}/${DOTENVRTDB_PATH_URL}-tai
 CADDY_EMAIL=admin@${DOMAIN}
 
 # Public URL where Tinyauth is exposed by Caddy/Cloudflared.
-TINYAUTH_APP_URL=http://auth.${DOMAIN}
+TINYAUTH_APP_URL=https://auth.${DOMAIN}
 # Internal port exposed by Tinyauth container.
 TINYAUTH_PORT=3000
 # Long random secret used to sign sessions/cookies. Generate: openssl rand -hex 32
@@ -717,7 +717,7 @@ services:
     env_file:
       - ./.env
     environment:
-      APP_URL: "${TINYAUTH_APP_URL:-http://auth.${DOMAIN}}"
+      APP_URL: "${TINYAUTH_APP_URL:-https://auth.${DOMAIN}}"
       SECRET: "${TINYAUTH_SECRET:-change-me-generate-a-long-random-secret}"
       USERS: "${TINYAUTH_USERS:-admin:changeme}"
       OAUTH_AUTO_REDIRECT: "${TINYAUTH_OAUTH_AUTO_REDIRECT:-none}"
@@ -1941,10 +1941,11 @@ exec litestream replicate -config "$CONFIG_PATH"
 - Network: `app_net`
 - Data volume: `${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/tinyauth:/data`
 - DB runtime: `sqlite:////data/${TINYAUTH_DB_FILE}`
-- Public auth host:
-  - `http://auth.${PROJECT_NAME}.${DOMAIN}`
-  - `http://auth.${DOMAIN}`
-  - `http://auth.${PROJECT_NAME_TAILSCALE}.${TAILSCALE_TAILNET_DOMAIN}`
+- Public auth URL trên browser:
+  - `https://auth.${PROJECT_NAME}.${DOMAIN}`
+  - `https://auth.${DOMAIN}`
+  - `https://auth.${PROJECT_NAME_TAILSCALE}.${TAILSCALE_TAILNET_DOMAIN}`
+- Caddy labels vẫn dùng `http://...` vì Cloudflared/Tailscale proxy vào Caddy qua port 80.
 
 ## Caddy integration
 Các service cần bảo vệ thêm labels:
@@ -1958,7 +1959,7 @@ Các service cần bảo vệ thêm labels:
 Giữ label `reverse_proxy` của service như cũ.
 
 ## ENV cần thiết
-- `TINYAUTH_APP_URL`: public URL của Tinyauth, ví dụ `http://auth.${DOMAIN}`.
+- `TINYAUTH_APP_URL`: public URL của Tinyauth, ví dụ `https://auth.${DOMAIN}`.
 - `TINYAUTH_PORT`: port nội bộ Tinyauth, mặc định `3000`.
 - `TINYAUTH_SECRET`: secret ký session/cookie. Generate: `openssl rand -hex 32`.
 - `TINYAUTH_DB_FILE`: tên file SQLite trong volume Tinyauth, mặc định `tinyauth.db`.

@@ -39,7 +39,7 @@ services:
     container_name: "tinyauth"
     image: ghcr.io/steveiliop56/tinyauth:v5
     command:
-      - "--appurl=${TINYAUTH_APP_URL:-http://auth.${DOMAIN}}"
+      - "--appurl=${TINYAUTH_APP_URL:-https://auth.${DOMAIN}}"
       - "--server.port=${TINYAUTH_PORT:-3000}"
       - "--database.path=/data/${TINYAUTH_DB_FILE:-tinyauth.db}"
       - "--auth.users=${TINYAUTH_USERS:-admin:changeme}"
