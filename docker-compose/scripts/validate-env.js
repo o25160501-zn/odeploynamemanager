@@ -115,6 +115,29 @@ function isValidHttpsJsonUrl(v) {
   }
 }
 
+function isValidTinyauthUsers(v) {
+  const users = String(v || "")
+    .split(",")
+    .map((user) => user.trim())
+    .filter(Boolean);
+
+  if (!users.length) return "must include at least one user";
+
+  for (const user of users) {
+    const [username, hash] = user.split(":");
+    if (!username || !hash) {
+      return "each user must use username:bcrypt_hash format";
+    }
+
+    const normalizedHash = hash.replace(/\$\$/g, "$");
+    if (!/^\$2[aby]\$\d{2}\$/.test(normalizedHash)) {
+      return `${username} must use a bcrypt hash, not a plain password. Generate with: docker run --rm ghcr.io/steveiliop56/tinyauth:v5 user create --username ${username} --password <password> --docker`;
+    }
+  }
+
+  return null;
+}
+
 function buildAppHost(project, domain) {
   const p = (project || "").trim().toLowerCase();
   const d = (domain || "").trim().toLowerCase();
@@ -141,7 +164,7 @@ if ((env.TINYAUTH_SECRET || "").includes("change-me")) {
   warnings.push("TINYAUTH_SECRET uses example default -> replace before public deploy");
 }
 checkRequired("TINYAUTH_DB_FILE", "Tinyauth SQLite file");
-checkRequired("TINYAUTH_USERS", "at least one static user or deployment default");
+checkRequired("TINYAUTH_USERS", "at least one static user or deployment default", isValidTinyauthUsers);
 checkPort("APP_PORT", true);
 
 // 2) Optional env from compose files
@@ -152,6 +175,7 @@ checkPort("WEBSSH_HOST_PORT", false);
 checkOptional("NODE_ENV", "app runtime env");
 checkOptional("HEALTH_PATH", "health endpoint path", (v) => (v.startsWith("/") ? null : "must start with '/'"));
 checkOptional("DOCKER_SOCK", "docker socket path override");
+checkOptional("TINYAUTH_TRUSTED_PROXIES", "CIDRs trusted by Tinyauth for X-Forwarded-* headers");
 checkPort("DOCKER_DEPLOY_CODE_PORT", false);
 checkPort("DOCKER_DEPLOY_CODE_HOST_PORT", false);
 checkOptional("DOCKER_DEPLOY_CODE_CADDY_HOSTS", "public Caddy host for deploy-code UI/API");
@@ -160,6 +184,9 @@ checkOptional("DOCKER_DEPLOY_CODE_BRANCH", "git branch to deploy");
 checkOptional("DOCKER_DEPLOY_CODE_REMOTE", "git remote to fetch");
 checkOptional("DOCKER_DEPLOY_CODE_COMPOSE_SCRIPT", "compose orchestration script inside repo");
 checkOptional("DOCKER_DEPLOY_CODE_DEPLOY_SERVICES", "comma-separated compose services to rebuild/redeploy");
+checkOptional("DOCKER_DEPLOY_CODE_DEPLOY_BUILD", "true|false toggle for deploy-code compose --build", (v) =>
+  isBool(v) ? null : "must be true|false"
+);
 checkOptional("DOCKER_DEPLOY_CODE_CONTAINER_CONTROL_ENABLED", "true|false toggle for container control API", (v) =>
   isBool(v) ? null : "must be true|false"
 );

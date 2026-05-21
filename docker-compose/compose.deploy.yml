@@ -31,6 +31,7 @@ services:
       DOCKER_DEPLOY_CODE_GIT_CLEAN: "${DOCKER_DEPLOY_CODE_GIT_CLEAN:-false}"
       DOCKER_DEPLOY_CODE_COMPOSE_SCRIPT: "${DOCKER_DEPLOY_CODE_COMPOSE_SCRIPT:-docker-compose/scripts/dc.sh}"
       DOCKER_DEPLOY_CODE_DEPLOY_SERVICES: "${DOCKER_DEPLOY_CODE_DEPLOY_SERVICES:-app}"
+      DOCKER_DEPLOY_CODE_DEPLOY_BUILD: "${DOCKER_DEPLOY_CODE_DEPLOY_BUILD:-true}"
       DOCKER_DEPLOY_CODE_RESTART_CONTAINERS: "${DOCKER_DEPLOY_CODE_RESTART_CONTAINERS:-}"
       DOCKER_DEPLOY_CODE_DEPLOY_COMMAND: "${DOCKER_DEPLOY_CODE_DEPLOY_COMMAND:-}"
       DOCKER_DEPLOY_CODE_POST_DEPLOY_COMMAND: "${DOCKER_DEPLOY_CODE_POST_DEPLOY_COMMAND:-}"
@@ -74,6 +75,7 @@ services:
       - "caddy=http://${DOCKER_DEPLOY_CODE_CADDY_HOSTS:-deploy.localhost}"
       - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
       - "caddy.forward_auth.uri=/api/auth/caddy"
+      - "caddy.forward_auth.header_up=X-Forwarded-Proto https"
       - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
       - "caddy.reverse_proxy={{upstreams ${DOCKER_DEPLOY_CODE_PORT:-53999}}}"
     networks: [app_net]

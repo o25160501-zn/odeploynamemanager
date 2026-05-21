@@ -29,6 +29,7 @@ Các service cần bảo vệ thêm labels:
 ```yaml
 - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
 - "caddy.forward_auth.uri=/api/auth/caddy"
+- "caddy.forward_auth.header_up=X-Forwarded-Proto https"
 - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
 ```
 
@@ -39,11 +40,13 @@ Giữ label `reverse_proxy` của service như cũ.
 - `TINYAUTH_PORT`: port nội bộ Tinyauth, mặc định `3000`.
 - `TINYAUTH_SECRET`: secret ký session/cookie. Generate: `openssl rand -hex 32`.
 - `TINYAUTH_DB_FILE`: tên file SQLite trong volume Tinyauth, mặc định `tinyauth.db`.
-- `TINYAUTH_USERS`: users tĩnh, comma-separated, ví dụ `admin:changeme`.
+- `TINYAUTH_USERS`: users tĩnh, comma-separated, format `username:bcrypt_hash`, không dùng password plain text. Generate:
+  `docker run --rm ghcr.io/steveiliop56/tinyauth:v5 user create --username admin --password changeme --docker`.
 - `TINYAUTH_OAUTH_AUTO_REDIRECT`: auto redirect provider. Giá trị phổ biến: `none`, `github`, `google`, `generic`.
 - `TINYAUTH_DISABLE_CONTINUE`: `true|false`, ẩn/hiện trang continue sau login.
 - `TINYAUTH_COOKIE_SECURE`: `true|false`, giữ `true` khi đi qua HTTPS tunnel.
-- `TINYAUTH_TRUST_PROXY`: `true|false`, giữ `true` với Caddy/Cloudflared/Tailscale để tránh cảnh báo http/https direct.
+- `TINYAUTH_TRUST_PROXY`: legacy compatibility flag.
+- `TINYAUTH_TRUSTED_PROXIES`: CIDR proxy nội bộ được Tinyauth tin để đọc `X-Forwarded-*`, ví dụ `172.16.0.0/12,10.0.0.0/8,192.168.0.0/16,127.0.0.1/32,::1/128,fc00::/7`.
 - `TINYAUTH_LOG_LEVEL`: `trace|debug|info|warn|error`.
 
 ## OAuth ENV phổ biến

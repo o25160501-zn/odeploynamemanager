@@ -144,6 +144,19 @@ npm run dockerapp-exec:ps
 npm run dockerapp-exec:logs
 ```
 
+Lệnh nhanh theo tình huống:
+
+```bash
+# Chỉ đổi config/env/Caddy/Tinyauth, không build image
+npm run dockerapp-exec:up:fast
+
+# Chỉ recreate auth sau khi đổi TINYAUTH_*
+npm run dockerapp-exec:up:auth
+
+# Chỉ rebuild app, không kéo dependency service rebuild theo
+npm run dockerapp-exec:up:app
+```
+
 ## Truy cập dịch vụ qua Tailscale hostname + port
 
 Khi `ENABLE_TAILSCALE=true`, bạn có thể dùng hostname tailnet của node:

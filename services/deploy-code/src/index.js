@@ -58,6 +58,7 @@ function config() {
     remote: env('REMOTE', 'origin'),
     gitClean: bool('GIT_CLEAN', false),
     deployServices: list('DEPLOY_SERVICES', 'app'),
+    deployBuild: bool('DEPLOY_BUILD', true),
     restartContainers: list('RESTART_CONTAINERS', ''),
     composeScript: env('COMPOSE_SCRIPT', 'docker-compose/scripts/dc.sh'),
     deployCommand: env('DEPLOY_COMMAND', ''),
@@ -100,6 +101,7 @@ function publicConfig(cfg = config()) {
     remote: cfg.remote,
     gitClean: cfg.gitClean,
     deployServices: cfg.deployServices,
+    deployBuild: cfg.deployBuild,
     restartContainers: cfg.restartContainers,
     composeScript: cfg.composeScript,
     hasDeployCommand: Boolean(cfg.deployCommand),
@@ -313,8 +315,14 @@ async function runDeployCommands(cfg = config()) {
     const scriptPath = path.isAbsolute(cfg.composeScript)
       ? cfg.composeScript
       : path.join(cfg.repoDir, cfg.composeScript);
-    await writeLog('info', 'Rebuilding configured Docker Compose services.', { services: cfg.deployServices, composeScript: scriptPath });
-    await run('bash', [scriptPath, 'up', '-d', '--build', '--no-deps', ...cfg.deployServices], { cwd: cfg.repoDir });
+    const args = ['up', '-d', '--no-deps'];
+    if (cfg.deployBuild) args.push('--build');
+    await writeLog(
+      'info',
+      cfg.deployBuild ? 'Rebuilding configured Docker Compose services.' : 'Recreating configured Docker Compose services without rebuild.',
+      { services: cfg.deployServices, composeScript: scriptPath, build: cfg.deployBuild }
+    );
+    await run('bash', [scriptPath, ...args, ...cfg.deployServices], { cwd: cfg.repoDir });
   }
 
   if (cfg.restartContainers.length) {

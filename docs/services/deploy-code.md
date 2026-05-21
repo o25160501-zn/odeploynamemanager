@@ -55,6 +55,7 @@ DOCKER_DEPLOY_CODE_API_TOKEN=<long-random-token>
 DOCKER_DEPLOY_CODE_REQUIRE_TOKEN=true
 DOCKER_DEPLOY_CODE_CADDY_HOSTS=deploy.${DOMAIN}
 DOCKER_DEPLOY_CODE_DEPLOY_SERVICES=app
+DOCKER_DEPLOY_CODE_DEPLOY_BUILD=true
 DOCKER_DEPLOY_CODE_SERVICE_ALLOWLIST=app
 DOCKER_DEPLOY_CODE_CONTAINER_ALLOWLIST=main-app,deploy-code
 ```
@@ -84,7 +85,8 @@ npm run dockerapp-exec:up
 Các thao tác chính trong UI:
 
 - `Check`: `git fetch` và so sánh local/remote commit.
-- `Deploy`: reset workspace về `${DOCKER_DEPLOY_CODE_REMOTE}/${DOCKER_DEPLOY_CODE_BRANCH}` rồi rebuild service trong `DOCKER_DEPLOY_CODE_DEPLOY_SERVICES`.
+- `Deploy`: reset workspace về `${DOCKER_DEPLOY_CODE_REMOTE}/${DOCKER_DEPLOY_CODE_BRANCH}` rồi chạy compose cho service trong `DOCKER_DEPLOY_CODE_DEPLOY_SERVICES`.
+- `DOCKER_DEPLOY_CODE_DEPLOY_BUILD=false`: bỏ `--build`, phù hợp khi chỉ đổi config/env/service không có Dockerfile build.
 - `Force`: deploy kể cả khi commit không đổi.
 - `Upload ZIP`: apply ZIP vào workspace bằng `rsync`, mặc định không xoá file ngoài ZIP và backup trước khi apply.
 - `Services/Containers`: start/stop/restart/rebuild/logs theo allowlist.

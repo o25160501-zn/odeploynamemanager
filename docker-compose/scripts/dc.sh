@@ -104,6 +104,11 @@ else
   echo "⚠️  .env not found — using defaults. Run: cp .env.example .env" >&2
 fi
 
+# Enable BuildKit so Dockerfiles can reuse npm/Next.js cache mounts between
+# deploys. Callers can still override these values when needed.
+export DOCKER_BUILDKIT="${DOCKER_BUILDKIT:-1}"
+export COMPOSE_DOCKER_CLI_BUILD="${COMPOSE_DOCKER_CLI_BUILD:-1}"
+
 # Normalize tags to comma-separated form without spaces.
 if [ -n "${TAILSCALE_TAGS:-}" ]; then
   TAILSCALE_TAGS="$(printf '%s' "$TAILSCALE_TAGS" | tr -d '[:space:]')"

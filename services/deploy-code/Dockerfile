@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 FROM node:20-alpine
 
 WORKDIR /app
@@ -15,7 +16,8 @@ RUN apk add --no-cache \
   unzip
 
 COPY package*.json ./
-RUN npm ci --omit=dev --omit=optional --no-audit --no-fund --loglevel=error --no-update-notifier
+RUN --mount=type=cache,target=/root/.npm \
+  npm ci --omit=dev --omit=optional --no-audit --no-fund --loglevel=error --no-update-notifier
 
 COPY src ./src
 COPY public ./public

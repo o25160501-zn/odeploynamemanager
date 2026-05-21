@@ -279,16 +279,19 @@ TINYAUTH_PORT=3000
 TINYAUTH_SECRET=change-me-generate-a-long-random-secret
 # SQLite database filename stored in ${DOCKER_VOLUMES_ROOT}/tinyauth.
 TINYAUTH_DB_FILE=tinyauth.db
-# Static users, comma-separated. Common format: user:password or user:password_hash.
-TINYAUTH_USERS=admin:changeme
+# Static users, comma-separated. Must be username:bcrypt_hash, not plain password.
+# Generate: docker run --rm ghcr.io/steveiliop56/tinyauth:v5 user create --username admin --password changeme --docker
+TINYAUTH_USERS=admin:$$2a$$10$$j6BSX9Y0bt2AuNczVnizP.9sB/WAXi2V7e0LYvZdcDfiMUBFG/S5m
 # Automatically redirect to OAuth provider. Options: none, github, google, generic
 TINYAUTH_OAUTH_AUTO_REDIRECT=none
 # Hide the post-login continue page. Options: true, false
 TINYAUTH_DISABLE_CONTINUE=false
 # Secure cookie flag. Keep true behind HTTPS tunnels; set false only for plain local HTTP testing.
 TINYAUTH_COOKIE_SECURE=true
-# Trust reverse proxy headers from Caddy/Cloudflared/Tailscale; suppress direct http/https warning.
+# Legacy compatibility flag; Tinyauth v5 uses TINYAUTH_TRUSTED_PROXIES below.
 TINYAUTH_TRUST_PROXY=true
+# Trusted proxy CIDRs allowed to provide X-Forwarded-* headers to Tinyauth.
+TINYAUTH_TRUSTED_PROXIES=172.16.0.0/12,10.0.0.0/8,192.168.0.0/16,127.0.0.1/32,::1/128,fc00::/7
 # Log verbosity. Options: trace, debug, info, warn, error
 TINYAUTH_LOG_LEVEL=info
 # OAuth provider config. Google: https://console.cloud.google.com/apis/credentials
@@ -406,6 +409,7 @@ DOCKER_DEPLOY_CODE_GIT_CLEAN=false
 # Deploy target: rebuild/recreate only the configured Compose service(s).
 DOCKER_DEPLOY_CODE_COMPOSE_SCRIPT=docker-compose/scripts/dc.sh
 DOCKER_DEPLOY_CODE_DEPLOY_SERVICES=app
+DOCKER_DEPLOY_CODE_DEPLOY_BUILD=true
 DOCKER_DEPLOY_CODE_RESTART_CONTAINERS=
 DOCKER_DEPLOY_CODE_DEPLOY_COMMAND=
 DOCKER_DEPLOY_CODE_POST_DEPLOY_COMMAND=
@@ -589,6 +593,7 @@ services:
       - "caddy=http://${PROJECT_NAME}.${DOMAIN}, http://main.${DOMAIN}, http://${DOMAIN}, http://${PROJECT_NAME_TAILSCALE}.${TAILSCALE_TAILNET_DOMAIN}"
       - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
       - "caddy.forward_auth.uri=/api/auth/caddy"
+      - "caddy.forward_auth.header_up=X-Forwarded-Proto https"
       - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
       - "caddy.reverse_proxy={{upstreams ${APP_PORT:-3000}}}"
       # Internal HTTPS site for Tailscale / trusted LAN access.
@@ -596,6 +601,7 @@ services:
       - "caddy_1.tls=internal"
       - "caddy_1.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
       - "caddy_1.forward_auth.uri=/api/auth/caddy"
+      - "caddy_1.forward_auth.header_up=X-Forwarded-Proto https"
       - "caddy_1.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
       - "caddy_1.reverse_proxy={{upstreams ${APP_PORT:-3000}}}"
     networks: [app_net]
@@ -719,11 +725,12 @@ services:
     environment:
       APP_URL: "${TINYAUTH_APP_URL:-https://auth.${DOMAIN}}"
       SECRET: "${TINYAUTH_SECRET:-change-me-generate-a-long-random-secret}"
-      USERS: "${TINYAUTH_USERS:-admin:changeme}"
+      USERS: "${TINYAUTH_USERS:-admin:$$2a$$10$$j6BSX9Y0bt2AuNczVnizP.9sB/WAXi2V7e0LYvZdcDfiMUBFG/S5m}"
       OAUTH_AUTO_REDIRECT: "${TINYAUTH_OAUTH_AUTO_REDIRECT:-none}"
       DISABLE_CONTINUE: "${TINYAUTH_DISABLE_CONTINUE:-false}"
       COOKIE_SECURE: "${TINYAUTH_COOKIE_SECURE:-true}"
       TRUST_PROXY: "${TINYAUTH_TRUST_PROXY:-true}"
+      TRUSTED_PROXIES: "${TINYAUTH_TRUSTED_PROXIES:-172.16.0.0/12,10.0.0.0/8,192.168.0.0/16,127.0.0.1/32,::1/128,fc00::/7}"
       LOG_LEVEL: "${TINYAUTH_LOG_LEVEL:-info}"
       GOOGLE_CLIENT_ID: "${TINYAUTH_GOOGLE_CLIENT_ID:-}"
       GOOGLE_CLIENT_SECRET: "${TINYAUTH_GOOGLE_CLIENT_SECRET:-}"
@@ -794,6 +801,7 @@ services:
       - "caddy.reverse_proxy.flush_interval=-1" # ← thêm dòng này
       - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
       - "caddy.forward_auth.uri=/api/auth/caddy"
+      - "caddy.forward_auth.header_up=X-Forwarded-Proto https"
       - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
     networks: [app_net]
     restart: unless-stopped
@@ -816,6 +824,7 @@ services:
       - "caddy.reverse_proxy={{upstreams 80}}"
       - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
       - "caddy.forward_auth.uri=/api/auth/caddy"
+      - "caddy.forward_auth.header_up=X-Forwarded-Proto https"
       - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
     networks: [app_net]
     restart: unless-stopped
@@ -851,6 +860,7 @@ services:
       - "caddy.reverse_proxy={{upstreams 7681}}"
       - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
       - "caddy.forward_auth.uri=/api/auth/caddy"
+      - "caddy.forward_auth.header_up=X-Forwarded-Proto https"
       - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
     networks: [app_net]
     restart: unless-stopped
@@ -872,6 +882,7 @@ services:
       - "caddy.reverse_proxy={{upstreams 7681}}"
       - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
       - "caddy.forward_auth.uri=/api/auth/caddy"
+      - "caddy.forward_auth.header_up=X-Forwarded-Proto https"
       - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
     networks: [app_net]
     restart: unless-stopped
@@ -1248,6 +1259,11 @@ else
   echo "⚠️  .env not found — using defaults. Run: cp .env.example .env" >&2
 fi
 
+# Enable BuildKit so Dockerfiles can reuse npm/Next.js cache mounts between
+# deploys. Callers can still override these values when needed.
+export DOCKER_BUILDKIT="${DOCKER_BUILDKIT:-1}"
+export COMPOSE_DOCKER_CLI_BUILD="${COMPOSE_DOCKER_CLI_BUILD:-1}"
+
 # Normalize tags to comma-separated form without spaces.
 if [ -n "${TAILSCALE_TAGS:-}" ]; then
   TAILSCALE_TAGS="$(printf '%s' "$TAILSCALE_TAGS" | tr -d '[:space:]')"
@@ -1518,6 +1534,29 @@ function isValidHttpsJsonUrl(v) {
   }
 }
 
+function isValidTinyauthUsers(v) {
+  const users = String(v || "")
+    .split(",")
+    .map((user) => user.trim())
+    .filter(Boolean);
+
+  if (!users.length) return "must include at least one user";
+
+  for (const user of users) {
+    const [username, hash] = user.split(":");
+    if (!username || !hash) {
+      return "each user must use username:bcrypt_hash format";
+    }
+
+    const normalizedHash = hash.replace(/\$\$/g, "$");
+    if (!/^\$2[aby]\$\d{2}\$/.test(normalizedHash)) {
+      return `${username} must use a bcrypt hash, not a plain password. Generate with: docker run --rm ghcr.io/steveiliop56/tinyauth:v5 user create --username ${username} --password <password> --docker`;
+    }
+  }
+
+  return null;
+}
+
 function buildAppHost(project, domain) {
   const p = (project || "").trim().toLowerCase();
   const d = (domain || "").trim().toLowerCase();
@@ -1544,7 +1583,7 @@ if ((env.TINYAUTH_SECRET || "").includes("change-me")) {
   warnings.push("TINYAUTH_SECRET uses example default -> replace before public deploy");
 }
 checkRequired("TINYAUTH_DB_FILE", "Tinyauth SQLite file");
-checkRequired("TINYAUTH_USERS", "at least one static user or deployment default");
+checkRequired("TINYAUTH_USERS", "at least one static user or deployment default", isValidTinyauthUsers);
 checkPort("APP_PORT", true);
 
 // 2) Optional env from compose files
@@ -1555,6 +1594,7 @@ checkPort("WEBSSH_HOST_PORT", false);
 checkOptional("NODE_ENV", "app runtime env");
 checkOptional("HEALTH_PATH", "health endpoint path", (v) => (v.startsWith("/") ? null : "must start with '/'"));
 checkOptional("DOCKER_SOCK", "docker socket path override");
+checkOptional("TINYAUTH_TRUSTED_PROXIES", "CIDRs trusted by Tinyauth for X-Forwarded-* headers");
 checkPort("DOCKER_DEPLOY_CODE_PORT", false);
 checkPort("DOCKER_DEPLOY_CODE_HOST_PORT", false);
 checkOptional("DOCKER_DEPLOY_CODE_CADDY_HOSTS", "public Caddy host for deploy-code UI/API");
@@ -1563,6 +1603,9 @@ checkOptional("DOCKER_DEPLOY_CODE_BRANCH", "git branch to deploy");
 checkOptional("DOCKER_DEPLOY_CODE_REMOTE", "git remote to fetch");
 checkOptional("DOCKER_DEPLOY_CODE_COMPOSE_SCRIPT", "compose orchestration script inside repo");
 checkOptional("DOCKER_DEPLOY_CODE_DEPLOY_SERVICES", "comma-separated compose services to rebuild/redeploy");
+checkOptional("DOCKER_DEPLOY_CODE_DEPLOY_BUILD", "true|false toggle for deploy-code compose --build", (v) =>
+  isBool(v) ? null : "must be true|false"
+);
 checkOptional("DOCKER_DEPLOY_CODE_CONTAINER_CONTROL_ENABLED", "true|false toggle for container control API", (v) =>
   isBool(v) ? null : "must be true|false"
 );
@@ -1953,6 +1996,7 @@ Các service cần bảo vệ thêm labels:
 ```yaml
 - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
 - "caddy.forward_auth.uri=/api/auth/caddy"
+- "caddy.forward_auth.header_up=X-Forwarded-Proto https"
 - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
 ```
 
@@ -1963,11 +2007,13 @@ Giữ label `reverse_proxy` của service như cũ.
 - `TINYAUTH_PORT`: port nội bộ Tinyauth, mặc định `3000`.
 - `TINYAUTH_SECRET`: secret ký session/cookie. Generate: `openssl rand -hex 32`.
 - `TINYAUTH_DB_FILE`: tên file SQLite trong volume Tinyauth, mặc định `tinyauth.db`.
-- `TINYAUTH_USERS`: users tĩnh, comma-separated, ví dụ `admin:changeme`.
+- `TINYAUTH_USERS`: users tĩnh, comma-separated, format `username:bcrypt_hash`, không dùng password plain text. Generate:
+  `docker run --rm ghcr.io/steveiliop56/tinyauth:v5 user create --username admin --password changeme --docker`.
 - `TINYAUTH_OAUTH_AUTO_REDIRECT`: auto redirect provider. Giá trị phổ biến: `none`, `github`, `google`, `generic`.
 - `TINYAUTH_DISABLE_CONTINUE`: `true|false`, ẩn/hiện trang continue sau login.
 - `TINYAUTH_COOKIE_SECURE`: `true|false`, giữ `true` khi đi qua HTTPS tunnel.
-- `TINYAUTH_TRUST_PROXY`: `true|false`, giữ `true` với Caddy/Cloudflared/Tailscale để tránh cảnh báo http/https direct.
+- `TINYAUTH_TRUST_PROXY`: legacy compatibility flag.
+- `TINYAUTH_TRUSTED_PROXIES`: CIDR proxy nội bộ được Tinyauth tin để đọc `X-Forwarded-*`, ví dụ `172.16.0.0/12,10.0.0.0/8,192.168.0.0/16,127.0.0.1/32,::1/128,fc00::/7`.
 - `TINYAUTH_LOG_LEVEL`: `trace|debug|info|warn|error`.
 
 ## OAuth ENV phổ biến

@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 FROM node:20-alpine AS base
 
 # Install dependencies only when needed
@@ -8,7 +9,8 @@ WORKDIR /app
 
 # Install dependencies based on the preferred package manager
 COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+  npm ci --no-audit --no-fund --loglevel=error --no-update-notifier
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -43,7 +45,8 @@ ENV NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_ENCRYPT_SALT=$NEXT_PUBLIC_DPDNS_CLOUDF
 ENV DPDNS_CLOUDFLARED_MANAGER_BACKEND_API_SECRET_KEY=$DPDNS_CLOUDFLARED_MANAGER_BACKEND_API_SECRET_KEY
 ENV NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_ALLOWED_EMAILS=$NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_ALLOWED_EMAILS
 
-RUN npm run build
+RUN --mount=type=cache,target=/app/.next/cache \
+  npm run build
 
 # Production image, copy all the files and run next
 FROM base AS runner
