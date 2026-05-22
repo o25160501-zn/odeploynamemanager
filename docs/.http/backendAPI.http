@@ -53,7 +53,7 @@ Content-Type: application/json
   "service": "dpdns",
   "name": "Integration DPDNS",
   "email": "o25.11.0522@gmail.com",
-  "token": "dp_live_IdZ5tmHPNE97MwZ5AiQBstY3"
+  "token": "xxxx"
 }
 
 ### 4. Test Cloudflare Account Creation (Success)
@@ -65,7 +65,7 @@ Content-Type: application/json
   "userId": "{{userId}}",
   "service": "cloudflare",
   "name": "Integration Cloudflare",
-  "email": "cf-test@example.com",
+  "email": "o25.11.0522@gmail.com",
   "apiKey": "cloudflare_api_key_xyz",
   "accountId": "cf_account_id_789"
 }

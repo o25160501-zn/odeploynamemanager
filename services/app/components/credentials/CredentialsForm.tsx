@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CheckCircle2, ShieldAlert, XCircle, Plus, Pencil, Trash2, ArrowLeft, Play } from 'lucide-react';
+import { CheckCircle2, ShieldAlert, XCircle, Plus, Pencil, Trash2, ArrowLeft, Play, RefreshCw } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { useState } from 'react';
 import { useFloatMessage } from '@/components/feedback/FloatMessageProvider';
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MaskedInput } from '@/components/credentials/MaskedInput';
 import { credentialsSchema, type CredentialsFormValues } from '@/lib/validators';
-import { toErrorMessage } from '@/lib/utils';
+import { toErrorMessage, formatDateYYYYMMDD } from '@/lib/utils';
 import { CloudflareService } from '@/services/cloudflare.service';
 import { CredentialsService } from '@/services/credentials.service';
 import { DPDNSService } from '@/services/dpdns.service';
@@ -34,6 +34,26 @@ export function CredentialsForm({
   const [dpdnsStatus, setDpdnsStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [cfStatus, setCfStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState<string>('');
+
+  const [isReloading, setIsReloading] = useState(false);
+  const [filterEmail, setFilterEmail] = useState('');
+  const [filterDate, setFilterDate] = useState('');
+  const [filterDpdns, setFilterDpdns] = useState<'all' | 'verified' | 'unverified'>('all');
+  const [filterCloudflare, setFilterCloudflare] = useState<'all' | 'verified' | 'unverified'>('all');
+
+  const reloadAccounts = async () => {
+    if (!user) return;
+    setIsReloading(true);
+    try {
+      const freshAccounts = await CredentialsService.load(user.uid);
+      setAccounts(freshAccounts);
+      notifySuccess('Settings · Reload accounts', 'Account list reloaded.');
+    } catch (error) {
+      notifyError('Settings · Reload accounts', error);
+    } finally {
+      setIsReloading(false);
+    }
+  };
 
   const form = useForm<CredentialsFormValues>({
     resolver: zodResolver(credentialsSchema),
@@ -181,13 +201,52 @@ export function CredentialsForm({
   const error = form.formState.errors;
 
   if (mode === 'list') {
+    const hasActiveFilters = filterEmail !== '' || filterDate !== '' || filterDpdns !== 'all' || filterCloudflare !== 'all';
+    const resetFilters = () => {
+      setFilterEmail('');
+      setFilterDate('');
+      setFilterDpdns('all');
+      setFilterCloudflare('all');
+    };
+
+    const filteredAccounts = accounts.filter((acc) => {
+      if (filterEmail) {
+        const emailLower = acc.cloudflareEmail.toLowerCase();
+        const filterEmailLower = filterEmail.toLowerCase();
+        if (!emailLower.includes(filterEmailLower)) return false;
+      }
+
+      if (filterDate) {
+        const dateStr = acc.created_at ? formatDateYYYYMMDD(acc.created_at) : 'N/A';
+        const cleanFilterDate = filterDate.replace(/-/g, '.');
+        if (!dateStr.includes(cleanFilterDate)) return false;
+      }
+
+      if (filterDpdns !== 'all') {
+        const wantVerified = filterDpdns === 'verified';
+        if (acc.dpdnsVerified !== wantVerified) return false;
+      }
+
+      if (filterCloudflare !== 'all') {
+        const wantVerified = filterCloudflare === 'verified';
+        if (acc.cloudflareVerified !== wantVerified) return false;
+      }
+
+      return true;
+    });
+
     return (
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-semibold text-ink">Configured Accounts</h2>
-          <Button onClick={enterAddMode}>
-            <Plus className="mr-2 h-4 w-4" /> Add Account
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={reloadAccounts} disabled={isReloading}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${isReloading ? 'animate-spin' : ''}`} /> Reload
+            </Button>
+            <Button onClick={enterAddMode}>
+              <Plus className="mr-2 h-4 w-4" /> Add Account
+            </Button>
+          </div>
         </div>
 
         {user && (
@@ -218,48 +277,115 @@ export function CredentialsForm({
           </div>
         ) : (
           <div className="space-y-4">
-            {accounts.map((acc) => (
-              <div key={acc.id} className="asset-row p-6 bg-canvas border border-hairline rounded-xl hover:shadow-sm transition-all duration-200">
-                <div className="flex min-w-0 items-start gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="break-all text-lg font-semibold tracking-tight text-ink">{acc.name}</h3>
-                      <span className="pill-badge bg-surface-soft text-body text-xs font-mono">{acc.cloudflareEmail}</span>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <span className={`pill-badge text-xs gap-1.5 ${acc.dpdnsVerified ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                        {acc.dpdnsVerified ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                        DPDNS API
-                      </span>
-                      <span className={`pill-badge text-xs gap-1.5 ${acc.cloudflareVerified ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                        {acc.cloudflareVerified ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                        Cloudflare API
-                      </span>
-                    </div>
-                  </div>
+            {/* Filter controls */}
+            <div className="rounded-xl border border-hairline bg-surface-soft p-4 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-ink/80">Filter Accounts</span>
+                {hasActiveFilters && (
+                  <button onClick={resetFilters} className="text-xs font-semibold text-primary hover:underline">
+                    Reset Filters
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-soft">Cloudflare Email</label>
+                  <Input
+                    placeholder="Filter by email..."
+                    value={filterEmail}
+                    onChange={(e) => setFilterEmail(e.target.value)}
+                    className="h-8 text-xs bg-canvas"
+                  />
                 </div>
-
-                <div className="flex items-center gap-2">
-                  {onOpenPlayground && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() => onOpenPlayground(acc.id)}
-                      title="Open this account in API Playground"
-                    >
-                      <Play className="h-3.5 w-3.5 mr-1" /> Playground
-                    </Button>
-                  )}
-                  <Button variant="ghost" size="icon" onClick={() => enterEditMode(acc)} aria-label="Edit account" title="Edit account">
-                    <Pencil className="h-4 w-4 text-body hover:text-ink" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => setConfirmDelete({ open: true, accountId: acc.id })} aria-label="Delete account" title="Delete account">
-                    <Trash2 className="h-4 w-4 text-semantic-down" />
-                  </Button>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-soft">Date (YYYY.MM.DD)</label>
+                  <Input
+                    placeholder="e.g. 2026.05.22"
+                    value={filterDate}
+                    onChange={(e) => setFilterDate(e.target.value)}
+                    className="h-8 text-xs bg-canvas font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-soft">DPDNS API Status</label>
+                  <select
+                    value={filterDpdns}
+                    onChange={(e) => setFilterDpdns(e.target.value as any)}
+                    className="flex h-8 w-full rounded-md border border-input bg-canvas px-3 py-1 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="all">All</option>
+                    <option value="verified">Verified (Active)</option>
+                    <option value="unverified">Unverified (Error)</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-soft">Cloudflare API Status</label>
+                  <select
+                    value={filterCloudflare}
+                    onChange={(e) => setFilterCloudflare(e.target.value as any)}
+                    className="flex h-8 w-full rounded-md border border-input bg-canvas px-3 py-1 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="all">All</option>
+                    <option value="verified">Verified (Active)</option>
+                    <option value="unverified">Unverified (Error)</option>
+                  </select>
                 </div>
               </div>
-            ))}
+            </div>
+
+            {/* List of Accounts */}
+            {filteredAccounts.length === 0 ? (
+              <div className="feature-card py-8 text-center border border-dashed border-hairline rounded-xl">
+                <p className="text-body text-sm">No accounts found matching your filters.</p>
+                <Button variant="secondary" className="mt-2 text-xs h-8" onClick={resetFilters}>Clear Filters</Button>
+              </div>
+            ) : (
+              filteredAccounts.map((acc) => (
+                <div key={acc.id} className="asset-row p-6 bg-canvas border border-hairline rounded-xl hover:shadow-sm transition-all duration-200">
+                  <div className="flex min-w-0 items-start gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="break-all text-lg font-semibold tracking-tight text-ink">{acc.name}</h3>
+                        <span className="pill-badge bg-surface-soft text-body text-xs font-mono">{acc.cloudflareEmail}</span>
+                        <span className="text-[11px] text-muted-soft bg-surface-soft px-2 py-0.5 rounded font-mono">
+                          Created: {acc.created_at ? formatDateYYYYMMDD(acc.created_at) : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <span className={`pill-badge text-xs gap-1.5 ${acc.dpdnsVerified ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                          {acc.dpdnsVerified ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                          DPDNS API
+                        </span>
+                        <span className={`pill-badge text-xs gap-1.5 ${acc.cloudflareVerified ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                          {acc.cloudflareVerified ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                          Cloudflare API
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {onOpenPlayground && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="text-xs"
+                        onClick={() => onOpenPlayground(acc.id)}
+                        title="Open this account in API Playground"
+                      >
+                        <Play className="h-3.5 w-3.5 mr-1" /> Playground
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="icon" onClick={() => enterEditMode(acc)} aria-label="Edit account" title="Edit account">
+                      <Pencil className="h-4 w-4 text-body hover:text-ink" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => setConfirmDelete({ open: true, accountId: acc.id })} aria-label="Delete account" title="Delete account">
+                      <Trash2 className="h-4 w-4 text-semantic-down" />
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         )}
 

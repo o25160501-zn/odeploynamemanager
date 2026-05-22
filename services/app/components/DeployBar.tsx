@@ -32,6 +32,11 @@ export function DeployBar() {
   const repo = deployData['_DOTENVRTDB_RUNNER_REPO'] || 'unknow';
   const org = deployData['_DOTENVRTDB_RUNNER_ORG'] || 'unknow';
 
+  // Lọc các hostname của tunnel để hiển thị link truy cập
+  const tunnelVariables = Object.entries(deployData)
+    .filter(([key]) => key.startsWith('CLOUDFLARED_TUNNEL_HOSTNAME_'))
+    .sort(([a], [b]) => a.localeCompare(b));
+
   return (
     <>
       {/* Bottom Fixed Bar */}
@@ -108,15 +113,46 @@ export function DeployBar() {
 
             {/* Modal Content */}
             <div className="max-h-[60vh] overflow-y-auto pr-1">
+              {/* Dedicated Tunnel Links Section */}
+              {!loading && tunnelVariables.length > 0 && (
+                <div className="mb-6 rounded-lg border border-primary/20 bg-primary/5 p-4">
+                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                    </span>
+                    Active Tunnel Endpoints (HTTPS Access)
+                  </h4>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {tunnelVariables.map(([key, val]) => {
+                      if (!val) return null;
+                      const href = val.startsWith('http') ? val : `https://${val}`;
+                      return (
+                        <a
+                          key={key}
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-between rounded-md border border-white/5 bg-white/5 px-3 py-2 text-xs font-mono text-white/80 hover:bg-white/10 hover:text-white transition-all hover:border-primary/30"
+                        >
+                          <span className="text-white/40 text-[10px] shrink-0 mr-2">{key.replace('CLOUDFLARED_TUNNEL_HOSTNAME_', 'Tunnel ')}:</span>
+                          <span className="truncate text-primary hover:underline">{val}</span>
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <p className="mb-4 text-xs text-white/50 leading-relaxed">
-                Showing all loaded environment variables containing the prefix <code className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-primary">_DOTENVRTDB_RUNNER_</code>.
+                Showing all loaded environment variables with prefixes <code className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-primary">_DOTENVRTDB_RUNNER_</code> and <code className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-primary">CLOUDFLARED_TUNNEL_HOSTNAME_</code>.
               </p>
               
               {loading ? (
                 <div className="py-8 text-center text-xs text-white/40">Loading environment variables...</div>
               ) : Object.keys(deployData).length === 0 ? (
                 <div className="py-8 text-center text-xs text-white/40 border border-dashed border-white/10 rounded-lg">
-                  No environment variables with prefix <code className="font-mono text-white/60">_DOTENVRTDB_RUNNER_</code> found.
+                  No matching environment variables found.
                 </div>
               ) : (
                 <div className="overflow-hidden rounded-lg border border-white/10 bg-black/20">
@@ -133,7 +169,20 @@ export function DeployBar() {
                         .map(([key, val]) => (
                           <tr key={key} className="hover:bg-white/5 transition-colors">
                             <td className="px-4 py-3 font-medium text-primary select-all break-all pr-2">{key}</td>
-                            <td className="px-4 py-3 text-white/90 select-all break-all whitespace-pre-wrap">{val || <span className="text-white/20 italic">empty</span>}</td>
+                            <td className="px-4 py-3 text-white/90 select-all break-all whitespace-pre-wrap">
+                              {key.startsWith('CLOUDFLARED_TUNNEL_HOSTNAME_') && val ? (
+                                <a
+                                  href={val.startsWith('http') ? val : `https://${val}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline font-semibold"
+                                >
+                                  {val} ↗
+                                </a>
+                              ) : (
+                                val || <span className="text-white/20 italic">empty</span>
+                              )}
+                            </td>
                           </tr>
                         ))}
                     </tbody>
