@@ -1,9 +1,22 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CheckCircle2, ShieldAlert, XCircle, Plus, Pencil, Trash2, ArrowLeft, Play, RefreshCw } from 'lucide-react';
+import {
+  CheckCircle2,
+  ShieldAlert,
+  XCircle,
+  Plus,
+  Pencil,
+  Trash2,
+  ArrowLeft,
+  Play,
+  RefreshCw,
+  ArrowUp,
+  ArrowDown,
+  Globe2,
+} from 'lucide-react';
 import { useForm } from 'react-hook-form';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useFloatMessage } from '@/components/feedback/FloatMessageProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,9 +26,14 @@ import { toErrorMessage, formatDateYYYYMMDD } from '@/lib/utils';
 import { CloudflareService } from '@/services/cloudflare.service';
 import { CredentialsService } from '@/services/credentials.service';
 import { DPDNSService } from '@/services/dpdns.service';
+import { FirebaseService } from '@/services/firebase.service';
 import { useAppStore } from '@/stores/app.store';
 import type { DecryptedCredentialAccount } from '@/types';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { RegisterModal } from '@/components/domain/RegisterModal';
+
+type SortField = 'created_at' | 'name' | 'description' | 'domains_count';
+type SortDir = 'asc' | 'desc';
 
 export function CredentialsForm({
   onOpenPlayground,
@@ -24,7 +42,9 @@ export function CredentialsForm({
 }) {
   const user = useAppStore((state) => state.user);
   const accounts = useAppStore((state) => state.accounts) || [];
+  const domains = useAppStore((state) => state.domains) || [];
   const setAccounts = useAppStore((state) => state.setAccounts);
+  const setDomains = useAppStore((state) => state.setDomains);
   const { notifyError, notifySuccess } = useFloatMessage();
 
   // Mode state: 'list' | 'add' | 'edit'
@@ -40,6 +60,42 @@ export function CredentialsForm({
   const [filterDate, setFilterDate] = useState('');
   const [filterDpdns, setFilterDpdns] = useState<'all' | 'verified' | 'unverified'>('all');
   const [filterCloudflare, setFilterCloudflare] = useState<'all' | 'verified' | 'unverified'>('all');
+
+  // Sort state
+  const [sortField, setSortField] = useState<SortField>('created_at');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  // Direct register modal
+  const [registerModalOpen, setRegisterModalOpen] = useState(false);
+  const [registerDefaultAccountId, setRegisterDefaultAccountId] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    return FirebaseService.subscribeDomains(user.uid, setDomains);
+  }, [setDomains, user]);
+
+  // Per-account domain count
+  const domainCountByAccount = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const d of domains) {
+      if (d.credentialAccountId) {
+        counts[d.credentialAccountId] = (counts[d.credentialAccountId] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [domains]);
+
+  // Domains per account
+  const domainsByAccount = useMemo(() => {
+    const map: Record<string, typeof domains> = {};
+    for (const d of domains) {
+      if (d.credentialAccountId) {
+        if (!map[d.credentialAccountId]) map[d.credentialAccountId] = [];
+        map[d.credentialAccountId].push(d);
+      }
+    }
+    return map;
+  }, [domains]);
 
   const reloadAccounts = async () => {
     if (!user) return;
@@ -59,6 +115,7 @@ export function CredentialsForm({
     resolver: zodResolver(credentialsSchema),
     defaultValues: {
       name: '',
+      description: '',
       dpdnsToken: '',
       cloudflareEmail: '',
       cloudflareApiKey: '',
@@ -71,6 +128,7 @@ export function CredentialsForm({
     setEditingAccount(null);
     form.reset({
       name: '',
+      description: '',
       dpdnsToken: '',
       cloudflareEmail: '',
       cloudflareApiKey: '',
@@ -86,6 +144,7 @@ export function CredentialsForm({
     setEditingAccount(account);
     form.reset({
       name: account.name,
+      description: account.description || '',
       dpdnsToken: account.dpdnsToken,
       cloudflareEmail: account.cloudflareEmail,
       cloudflareApiKey: account.cloudflareApiKey,
@@ -162,14 +221,17 @@ export function CredentialsForm({
       const accountData: Omit<DecryptedCredentialAccount, 'created_at' | 'updated_at'> & { created_at?: number } = {
         id: editingAccount?.id || '', // Service will generate ID if blank
         name: values.name,
+        description: values.description || '',
         dpdnsToken: values.dpdnsToken,
         cloudflareEmail: values.cloudflareEmail,
         cloudflareApiKey: values.cloudflareApiKey,
         cloudflareAccountId: resolvedAccountId,
         dpdnsVerified: true,
         cloudflareVerified: true,
-        created_at: editingAccount?.created_at,
       };
+      if (editingAccount?.created_at) {
+        accountData.created_at = editingAccount.created_at;
+      }
 
       await CredentialsService.save(user.uid, accountData, { dpdns: true, cloudflare: true });
       
@@ -200,41 +262,77 @@ export function CredentialsForm({
 
   const error = form.formState.errors;
 
-  if (mode === 'list') {
-    const hasActiveFilters = filterEmail !== '' || filterDate !== '' || filterDpdns !== 'all' || filterCloudflare !== 'all';
-    const resetFilters = () => {
-      setFilterEmail('');
-      setFilterDate('');
-      setFilterDpdns('all');
-      setFilterCloudflare('all');
-    };
+  const openRegisterForAccount = (accountId: string) => {
+    setRegisterDefaultAccountId(accountId);
+    setRegisterModalOpen(true);
+  };
 
-    const filteredAccounts = accounts.filter((acc) => {
+  const hasActiveFilters = filterEmail !== '' || filterDate !== '' || filterDpdns !== 'all' || filterCloudflare !== 'all';
+  const resetFilters = () => {
+    setFilterEmail('');
+    setFilterDate('');
+    setFilterDpdns('all');
+    setFilterCloudflare('all');
+  };
+
+  const toggleSortDir = () => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+
+  const filteredAndSortedAccounts = useMemo(() => {
+    let result = accounts.filter((acc) => {
       if (filterEmail) {
         const emailLower = acc.cloudflareEmail.toLowerCase();
         const filterEmailLower = filterEmail.toLowerCase();
         if (!emailLower.includes(filterEmailLower)) return false;
       }
-
       if (filterDate) {
         const dateStr = acc.created_at ? formatDateYYYYMMDD(acc.created_at) : 'N/A';
         const cleanFilterDate = filterDate.replace(/-/g, '.');
         if (!dateStr.includes(cleanFilterDate)) return false;
       }
-
       if (filterDpdns !== 'all') {
         const wantVerified = filterDpdns === 'verified';
         if (acc.dpdnsVerified !== wantVerified) return false;
       }
-
       if (filterCloudflare !== 'all') {
         const wantVerified = filterCloudflare === 'verified';
         if (acc.cloudflareVerified !== wantVerified) return false;
       }
-
       return true;
     });
 
+    result = [...result].sort((a, b) => {
+      let aVal: string | number;
+      let bVal: string | number;
+      switch (sortField) {
+        case 'name':
+          aVal = a.name.toLowerCase();
+          bVal = b.name.toLowerCase();
+          break;
+        case 'description':
+          aVal = (a.description || '').toLowerCase();
+          bVal = (b.description || '').toLowerCase();
+          break;
+        case 'domains_count':
+          aVal = domainCountByAccount[a.id] || 0;
+          bVal = domainCountByAccount[b.id] || 0;
+          break;
+        case 'created_at':
+        default:
+          aVal = a.created_at || 0;
+          bVal = b.created_at || 0;
+          break;
+      }
+      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  }, [accounts, filterEmail, filterDate, filterDpdns, filterCloudflare, sortField, sortDir, domainCountByAccount]);
+
+  const SortDirIcon = sortDir === 'asc' ? ArrowUp : ArrowDown;
+
+  if (mode === 'list') {
     return (
       <div className="space-y-6">
         <div className="flex justify-between items-center">
@@ -277,10 +375,10 @@ export function CredentialsForm({
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Filter controls */}
+            {/* Filter + Sort controls */}
             <div className="rounded-xl border border-hairline bg-surface-soft p-4 shadow-sm space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-ink/80">Filter Accounts</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-ink/80">Filter & Sort Accounts</span>
                 {hasActiveFilters && (
                   <button onClick={resetFilters} className="text-xs font-semibold text-primary hover:underline">
                     Reset Filters
@@ -331,60 +429,142 @@ export function CredentialsForm({
                   </select>
                 </div>
               </div>
+
+              {/* Sort controls */}
+              <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-hairline">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-soft">Sort By</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {(
+                    [
+                      { value: 'created_at', label: 'Date Created' },
+                      { value: 'name', label: 'Name' },
+                      { value: 'description', label: 'Description' },
+                      { value: 'domains_count', label: 'Domains' },
+                    ] as { value: SortField; label: string }[]
+                  ).map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        if (sortField === opt.value) {
+                          toggleSortDir();
+                        } else {
+                          setSortField(opt.value);
+                          setSortDir('asc');
+                        }
+                      }}
+                      className={`flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold transition-all ${
+                        sortField === opt.value
+                          ? 'bg-primary text-white shadow-sm'
+                          : 'bg-canvas text-body border border-hairline hover:text-ink'
+                      }`}
+                    >
+                      {opt.label}
+                      {sortField === opt.value && <SortDirIcon className="h-3 w-3" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {/* List of Accounts */}
-            {filteredAccounts.length === 0 ? (
+            {filteredAndSortedAccounts.length === 0 ? (
               <div className="feature-card py-8 text-center border border-dashed border-hairline rounded-xl">
                 <p className="text-body text-sm">No accounts found matching your filters.</p>
                 <Button variant="secondary" className="mt-2 text-xs h-8" onClick={resetFilters}>Clear Filters</Button>
               </div>
             ) : (
-              filteredAccounts.map((acc) => (
-                <div key={acc.id} className="asset-row p-6 bg-canvas border border-hairline rounded-xl hover:shadow-sm transition-all duration-200">
-                  <div className="flex min-w-0 items-start gap-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="break-all text-lg font-semibold tracking-tight text-ink">{acc.name}</h3>
-                        <span className="pill-badge bg-surface-soft text-body text-xs font-mono">{acc.cloudflareEmail}</span>
-                        <span className="text-[11px] text-muted-soft bg-surface-soft px-2 py-0.5 rounded font-mono">
-                          Created: {acc.created_at ? formatDateYYYYMMDD(acc.created_at) : 'N/A'}
-                        </span>
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <span className={`pill-badge text-xs gap-1.5 ${acc.dpdnsVerified ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                          {acc.dpdnsVerified ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                          DPDNS API
-                        </span>
-                        <span className={`pill-badge text-xs gap-1.5 ${acc.cloudflareVerified ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                          {acc.cloudflareVerified ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                          Cloudflare API
-                        </span>
+              filteredAndSortedAccounts.map((acc) => {
+                const accDomains = domainsByAccount[acc.id] || [];
+                const domainCount = accDomains.length;
+                return (
+                  <div key={acc.id} className="asset-row p-6 bg-canvas border border-hairline rounded-xl hover:shadow-sm transition-all duration-200">
+                    <div className="flex min-w-0 items-start gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="break-all text-lg font-semibold tracking-tight text-ink">{acc.name}</h3>
+                          <span className="pill-badge bg-surface-soft text-body text-xs font-mono">{acc.cloudflareEmail}</span>
+                          <span className="text-[11px] text-muted-soft bg-surface-soft px-2 py-0.5 rounded font-mono">
+                            Created: {acc.created_at ? formatDateYYYYMMDD(acc.created_at) : 'N/A'}
+                          </span>
+                        </div>
+
+                        {/* Description */}
+                        {acc.description && (
+                          <p className="mt-1.5 text-sm text-body italic">{acc.description}</p>
+                        )}
+
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <span className={`pill-badge text-xs gap-1.5 ${acc.dpdnsVerified ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                            {acc.dpdnsVerified ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                            DPDNS API
+                          </span>
+                          <span className={`pill-badge text-xs gap-1.5 ${acc.cloudflareVerified ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                            {acc.cloudflareVerified ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                            Cloudflare API
+                          </span>
+                          {/* Domain count badge */}
+                          <span className="pill-badge text-xs gap-1.5 bg-blue-50 text-blue-700">
+                            <Globe2 className="h-3 w-3" />
+                            {domainCount} domain{domainCount !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+
+                        {/* List of registered domains */}
+                        {accDomains.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {accDomains.map((d) => (
+                              <span
+                                key={d.fqdn}
+                                className={`inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-[11px] font-medium border ${
+                                  d.status === 'active'
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                    : d.status === 'error'
+                                    ? 'bg-red-50 text-red-700 border-red-100'
+                                    : 'bg-surface-soft text-body border-hairline'
+                                }`}
+                              >
+                                {d.fqdn}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-2">
-                    {onOpenPlayground && (
+                    <div className="flex flex-wrap items-center gap-2 mt-3">
+                      {/* Register domain directly from this account */}
                       <Button
                         variant="secondary"
                         size="sm"
                         className="text-xs"
-                        onClick={() => onOpenPlayground(acc.id)}
-                        title="Open this account in API Playground"
+                        onClick={() => openRegisterForAccount(acc.id)}
+                        title="Register a new domain using this account"
                       >
-                        <Play className="h-3.5 w-3.5 mr-1" /> Playground
+                        <Plus className="h-3.5 w-3.5 mr-1" /> Register Domain
                       </Button>
-                    )}
-                    <Button variant="ghost" size="icon" onClick={() => enterEditMode(acc)} aria-label="Edit account" title="Edit account">
-                      <Pencil className="h-4 w-4 text-body hover:text-ink" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setConfirmDelete({ open: true, accountId: acc.id })} aria-label="Delete account" title="Delete account">
-                      <Trash2 className="h-4 w-4 text-semantic-down" />
-                    </Button>
+
+                      {onOpenPlayground && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() => onOpenPlayground(acc.id)}
+                          title="Open this account in API Playground"
+                        >
+                          <Play className="h-3.5 w-3.5 mr-1" /> Playground
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="icon" onClick={() => enterEditMode(acc)} aria-label="Edit account" title="Edit account">
+                        <Pencil className="h-4 w-4 text-body hover:text-ink" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => setConfirmDelete({ open: true, accountId: acc.id })} aria-label="Delete account" title="Delete account">
+                        <Trash2 className="h-4 w-4 text-semantic-down" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
@@ -397,6 +577,16 @@ export function CredentialsForm({
           variant="danger"
           confirmLabel="Delete"
           onConfirm={() => deleteAccount(confirmDelete.accountId)}
+        />
+
+        {/* Direct register modal from account item */}
+        <RegisterModal
+          open={registerModalOpen}
+          onOpenChange={(open) => {
+            setRegisterModalOpen(open);
+            if (!open) setRegisterDefaultAccountId(undefined);
+          }}
+          defaultAccountId={registerDefaultAccountId}
         />
       </div>
     );
@@ -418,10 +608,19 @@ export function CredentialsForm({
 
       <section className="feature-card">
         <h3 className="text-lg font-semibold text-ink mb-4">Account Label</h3>
-        <div>
-          <label className="block text-sm font-semibold text-ink">Friendly Account Name</label>
-          <Input className="mt-2" placeholder="e.g. Personal DPDNS Account" {...form.register('name')} />
-          {error.name ? <p className="mt-2 text-sm text-red-600">{error.name.message}</p> : null}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-ink">Friendly Account Name</label>
+            <Input className="mt-2" placeholder="e.g. Personal DPDNS Account" {...form.register('name')} />
+            {error.name ? <p className="mt-2 text-sm text-red-600">{error.name.message}</p> : null}
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-ink">
+              Description / Diễn giải <span className="font-normal text-muted-soft">(Optional)</span>
+            </label>
+            <Input className="mt-2" placeholder="e.g. Tài khoản dùng cho project ABC..." {...form.register('description')} />
+            {error.description ? <p className="mt-2 text-sm text-red-600">{error.description.message}</p> : null}
+          </div>
         </div>
       </section>
 
@@ -505,4 +704,3 @@ function Status({ ok = false, label }: { ok?: boolean; label: string }) {
     </span>
   );
 }
-

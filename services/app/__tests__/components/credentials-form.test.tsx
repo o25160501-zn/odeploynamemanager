@@ -4,18 +4,19 @@ import { CredentialsForm } from '@/components/credentials/CredentialsForm';
 import { CloudflareService } from '@/services/cloudflare.service';
 import { CredentialsService } from '@/services/credentials.service';
 import { DPDNSService } from '@/services/dpdns.service';
+import { FirebaseService } from '@/services/firebase.service';
 import { useAppStore } from '@/stores/app.store';
 
 vi.mock('@/services/dpdns.service', () => ({ DPDNSService: { listDomains: vi.fn() } }));
 vi.mock('@/services/cloudflare.service', () => ({ CloudflareService: { verifyCredentials: vi.fn(), resolveAccountId: vi.fn() } }));
 vi.mock('@/services/credentials.service', () => ({ CredentialsService: { save: vi.fn(), load: vi.fn() } }));
+vi.mock('@/services/firebase.service', () => ({ FirebaseService: { subscribeDomains: vi.fn() } }));
 vi.mock('@/components/feedback/FloatMessageProvider', () => ({ useFloatMessage: () => ({ notifySuccess: vi.fn(), notifyError: vi.fn() }) }));
-
-const initialState = useAppStore.getState();
 
 describe('CredentialsForm', () => {
   beforeEach(() => {
     useAppStore.setState({ authReady: true, user: { uid: 'uid-1' } as never, accounts: [], domains: [] });
+    vi.mocked(FirebaseService.subscribeDomains).mockReturnValue(vi.fn());
     vi.mocked(DPDNSService.listDomains).mockResolvedValue({ success: true, data: [] });
     vi.mocked(CloudflareService.verifyCredentials).mockResolvedValue({ success: true, result: { id: 'user-1', email: 'user@example.com' } });
     vi.mocked(CloudflareService.resolveAccountId).mockResolvedValue('account-id');
@@ -29,6 +30,7 @@ describe('CredentialsForm', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /Add Account/i })[0]);
 
     fireEvent.change(screen.getByPlaceholderText('e.g. Personal DPDNS Account'), { target: { value: 'Test Account' } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Tài khoản dùng cho project ABC...'), { target: { value: 'Test description' } });
     fireEvent.change(screen.getByPlaceholderText('dp_live_xxxxx'), { target: { value: 'dp-token' } });
     fireEvent.change(screen.getByPlaceholderText('user@example.com'), { target: { value: 'user@example.com' } });
     fireEvent.change(screen.getByPlaceholderText('Auto-detect if blank'), { target: { value: 'account-id' } });
@@ -40,6 +42,7 @@ describe('CredentialsForm', () => {
     expect(CredentialsService.save).toHaveBeenCalledWith('uid-1', {
       id: '',
       name: 'Test Account',
+      description: 'Test description',
       dpdnsToken: 'dp-token',
       cloudflareEmail: 'user@example.com',
       cloudflareApiKey: 'a'.repeat(37),

@@ -1,9 +1,9 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useFloatMessage } from '@/components/feedback/FloatMessageProvider';
 import { Button } from '@/components/ui/button';
@@ -30,11 +30,19 @@ export function getSlotType(namespace: Namespace): SlotType {
   return namespace === '.dpdns.org' || namespace === '.qzz.io' ? 'free' : 'paid';
 }
 
-export function RegisterModal({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function RegisterModal({
+  open,
+  onOpenChange,
+  defaultAccountId,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  defaultAccountId?: string;
+}) {
   const router = useRouter();
   const user = useAppStore((state) => state.user);
-  const accounts = useAppStore((state) => state.accounts);
-  const domains = useAppStore((state) => state.domains);
+  const accounts = useAppStore((state) => state.accounts) || [];
+  const domains = useAppStore((state) => state.domains) || [];
   const { notifySuccess } = useFloatMessage();
 
   // Tabs state: 'auto' (Standard CF+DPDNS) or 'manual' (Import directly to Firebase)
@@ -44,10 +52,14 @@ export function RegisterModal({ open, onOpenChange }: { open: boolean; onOpenCha
   const [steps, setSteps] = useState<Step[]>(initialSteps);
   const [errorMessage, setErrorMessage] = useState('');
 
+  // Email filter for account selection
+  const [autoAccountEmailFilter, setAutoAccountEmailFilter] = useState('');
+  const [manualAccountEmailFilter, setManualAccountEmailFilter] = useState('');
+
   // Manual Import State
   const [manualSubdomain, setManualSubdomain] = useState('');
   const [manualNamespace, setManualNamespace] = useState<Namespace>('.dpdns.org');
-  const [manualAccountId, setManualAccountId] = useState('');
+  const [manualAccountId, setManualAccountId] = useState(defaultAccountId || '');
   const [manualZoneId, setManualZoneId] = useState('');
   const [manualNameservers, setManualNameservers] = useState('');
   const [manualNotes, setManualNotes] = useState('');
@@ -56,18 +68,44 @@ export function RegisterModal({ open, onOpenChange }: { open: boolean; onOpenCha
 
   const form = useForm<RegisterDomainValues>({
     resolver: zodResolver(registerDomainSchema),
-    defaultValues: { subdomain: '', namespace: '.dpdns.org', accountId: '' },
-    values: {
-      subdomain: '',
-      namespace: '.dpdns.org',
-      accountId: accounts.length === 1 ? accounts[0].id : '',
-    }
+    defaultValues: { subdomain: '', namespace: '.dpdns.org', accountId: defaultAccountId || '' },
   });
 
   const namespace = form.watch('namespace') as Namespace;
   const subdomain = form.watch('subdomain');
+  const selectedAutoAccountId = form.watch('accountId');
   const fqdn = useMemo(() => (subdomain ? `${subdomain.toLowerCase()}${namespace}` : `your-domain${namespace}`), [namespace, subdomain]);
   const slotType = getSlotType(namespace);
+
+  // Compute per-account domain count
+  const domainCountByAccount = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const d of domains) {
+      if (d.credentialAccountId) {
+        counts[d.credentialAccountId] = (counts[d.credentialAccountId] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [domains]);
+
+  useEffect(() => {
+    if (!open) return;
+    const nextAccountId = defaultAccountId || (accounts.length === 1 ? accounts[0].id : '');
+    form.setValue('accountId', nextAccountId);
+    setManualAccountId(nextAccountId);
+  }, [accounts, defaultAccountId, form, open]);
+
+  const filteredAutoAccounts = useMemo(() => {
+    const normalizedQuery = autoAccountEmailFilter.trim().toLowerCase();
+    if (!normalizedQuery) return accounts;
+    return accounts.filter((account) => account.cloudflareEmail.toLowerCase().includes(normalizedQuery));
+  }, [accounts, autoAccountEmailFilter]);
+
+  const filteredManualAccounts = useMemo(() => {
+    const normalizedQuery = manualAccountEmailFilter.trim().toLowerCase();
+    if (!normalizedQuery) return accounts;
+    return accounts.filter((account) => account.cloudflareEmail.toLowerCase().includes(normalizedQuery));
+  }, [accounts, manualAccountEmailFilter]);
 
   const setStep = (index: number, patch: Partial<Step>) => {
     setSteps((current) => current.map((step, idx) => (idx === index ? { ...step, ...patch } : step)));
@@ -217,6 +255,9 @@ export function RegisterModal({ open, onOpenChange }: { open: boolean; onOpenCha
     }
   };
 
+  const selectedAutoAccount = accounts.find((a) => a.id === selectedAutoAccountId);
+  const selectedManualAccount = accounts.find((a) => a.id === manualAccountId);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title="Add Domain" description="Register a new domain automatically or import an existing DPDNS domain manually.">
       <div className="mb-6 flex border-b border-hairline">
@@ -251,15 +292,34 @@ export function RegisterModal({ open, onOpenChange }: { open: boolean; onOpenCha
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-semibold text-ink">Select Account</label>
-              <Select className="mt-2" {...form.register('accountId')} disabled={accounts.length === 0 || form.formState.isSubmitting}>
+              {/* Email filter input */}
+              <div className="relative mt-2 mb-2">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-body pointer-events-none" />
+                <Input
+                  placeholder="Filter accounts by email..."
+                  value={autoAccountEmailFilter}
+                  onChange={(e) => setAutoAccountEmailFilter(e.target.value)}
+                  className="pl-9 h-8 text-xs bg-canvas"
+                  id="auto-account-email-filter"
+                />
+              </div>
+              <Select className="mt-1" {...form.register('accountId')} disabled={accounts.length === 0 || form.formState.isSubmitting}>
                 <option value="">-- Choose Account --</option>
-                {accounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.name} ({acc.cloudflareEmail})
-                  </option>
-                ))}
+                {filteredAutoAccounts.map((acc) => {
+                  const count = domainCountByAccount[acc.id] || 0;
+                  return (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name} ({acc.cloudflareEmail}) · {count} domain{count !== 1 ? 's' : ''}
+                    </option>
+                  );
+                })}
               </Select>
               {form.formState.errors.accountId ? <p className="mt-2 text-sm text-red-600">{form.formState.errors.accountId.message}</p> : null}
+              {selectedAutoAccount && (
+                <p className="mt-1.5 text-xs text-body">
+                  Selected account has <span className="font-semibold text-primary">{domainCountByAccount[selectedAutoAccount.id] || 0}</span> domains registered.
+                </p>
+              )}
             </div>
 
             <div className="grid gap-4 md:grid-cols-[1fr_180px]">
@@ -315,14 +375,33 @@ export function RegisterModal({ open, onOpenChange }: { open: boolean; onOpenCha
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-semibold text-ink">Select Account</label>
-              <Select className="mt-2" value={manualAccountId} onChange={(e) => setManualAccountId(e.target.value)} disabled={accounts.length === 0 || isManualSubmitting}>
+              {/* Email filter input */}
+              <div className="relative mt-2 mb-2">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-body pointer-events-none" />
+                <Input
+                  placeholder="Filter accounts by email..."
+                  value={manualAccountEmailFilter}
+                  onChange={(e) => setManualAccountEmailFilter(e.target.value)}
+                  className="pl-9 h-8 text-xs bg-canvas"
+                  id="manual-account-email-filter"
+                />
+              </div>
+              <Select className="mt-1" value={manualAccountId} onChange={(e) => setManualAccountId(e.target.value)} disabled={accounts.length === 0 || isManualSubmitting}>
                 <option value="">-- Choose Account --</option>
-                {accounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.name} ({acc.cloudflareEmail})
-                  </option>
-                ))}
+                {filteredManualAccounts.map((acc) => {
+                  const count = domainCountByAccount[acc.id] || 0;
+                  return (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name} ({acc.cloudflareEmail}) · {count} domain{count !== 1 ? 's' : ''}
+                    </option>
+                  );
+                })}
               </Select>
+              {selectedManualAccount && (
+                <p className="mt-1.5 text-xs text-body">
+                  Selected account has <span className="font-semibold text-primary">{domainCountByAccount[selectedManualAccount.id] || 0}</span> domains registered.
+                </p>
+              )}
             </div>
 
             <div className="grid gap-4 md:grid-cols-[1fr_180px]">

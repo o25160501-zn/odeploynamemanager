@@ -34,6 +34,7 @@ describe('CredentialsService', () => {
       {
         id: 'acc-1',
         name: 'My Account',
+        description: 'Test description',
         dpdnsToken: 'dp-token',
         cloudflareEmail: 'user@example.com',
         cloudflareApiKey: 'cf-api-key',
@@ -50,6 +51,7 @@ describe('CredentialsService', () => {
     expect(FirebaseService.saveCredentialAccount).toHaveBeenCalledWith('shared_user', {
       id: 'acc-1',
       name: 'My Account',
+      description: 'Test description',
       dpdns: { token: 'enc(shared_user:dp-token)', verified: true, verified_at: 1234 },
       cloudflare: {
         email: 'user@example.com',
@@ -68,6 +70,7 @@ describe('CredentialsService', () => {
       'acc-1': {
         id: 'acc-1',
         name: 'My Account',
+        description: 'Stored description',
         dpdns: { token: 'enc(shared_user:dp-token)', verified: true, verified_at: 1 },
         cloudflare: {
           email: 'user@example.com',
@@ -85,6 +88,7 @@ describe('CredentialsService', () => {
       {
         id: 'acc-1',
         name: 'My Account',
+        description: 'Stored description',
         dpdnsToken: 'dp-token',
         cloudflareEmail: 'user@example.com',
         cloudflareApiKey: 'cf-api-key',

@@ -16,6 +16,7 @@ export const CredentialsService = {
     const encrypted: EncryptedCredentialAccount = {
       id,
       name: account.name || 'Default Account',
+      description: account.description || '',
       dpdns: {
         token: encrypt(account.dpdnsToken, targetUid),
         verified: verification.dpdns,
@@ -99,6 +100,7 @@ export const CredentialsService = {
       return {
         id: acc.id,
         name: acc.name || 'Unnamed Account',
+        description: acc.description || '',
         dpdnsToken,
         cloudflareEmail: acc.cloudflare.email,
         cloudflareApiKey,

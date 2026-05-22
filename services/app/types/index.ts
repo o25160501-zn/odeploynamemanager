@@ -37,6 +37,7 @@ export interface DiagnosticAsset {
 export interface EncryptedCredentialAccount {
   id: string;
   name: string;
+  description?: string;
   dpdns: {
     token: string;
     verified: boolean;
@@ -56,6 +57,7 @@ export interface EncryptedCredentialAccount {
 export interface DecryptedCredentialAccount {
   id: string;
   name: string;
+  description?: string;
   dpdnsToken: string;
   cloudflareEmail: string;
   cloudflareApiKey: string;

@@ -11,6 +11,7 @@ export const namespaceSchema = z.enum(['.dpdns.org', '.us.kg', '.qzz.io', '.xx.k
 
 export const credentialsSchema = z.object({
   name: z.string().min(1, 'Account name is required').trim(),
+  description: z.string().trim().optional(),
   dpdnsToken: z.string().min(1, 'DPDNS token is required').trim(),
   cloudflareEmail: z.string().email('Invalid Cloudflare email'),
   cloudflareApiKey: z.string().min(1, 'Cloudflare API Key is required').trim(),
