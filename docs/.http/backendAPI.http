@@ -43,6 +43,19 @@ Content-Type: application/json
   "token": "dpdns_token_abc123"
 }
 
+### 3.1 Test DPDNS Account Creation (Success)
+POST {{baseUrl}}/api/accounts
+Authorization: Bearer {{secretKey}}
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "service": "dpdns",
+  "name": "Integration DPDNS",
+  "email": "o25.11.0522@gmail.com",
+  "token": "dp_live_IdZ5tmHPNE97MwZ5AiQBstY3"
+}
+
 ### 4. Test Cloudflare Account Creation (Success)
 POST {{baseUrl}}/api/accounts
 Authorization: Bearer {{secretKey}}

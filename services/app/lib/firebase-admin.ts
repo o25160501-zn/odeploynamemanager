@@ -2,8 +2,6 @@ import { createSign } from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const DEFAULT_SERVICE_ACCOUNT_PATH = '-gitignore/domain-register-app-demo-firebase-adminsdk-fbsvc-698c709985.json';
-
 interface ServiceAccount {
   project_id: string;
   client_email: string;
@@ -22,9 +20,62 @@ function base64url(value: any) {
 function getServiceAccount(): ServiceAccount {
   if (serviceAccountConfig) return serviceAccountConfig;
 
-  const envPath = process.env.DPDNS_CLOUDFLARED_MANAGER_FIREBASE_SERVICE_ACCOUNT_PATH;
-  const path = resolve(process.cwd(), /*turbopackIgnore: true*/ envPath || DEFAULT_SERVICE_ACCOUNT_PATH);
-  
+  const PREFIX = 'DPDNS_CLOUDFLARED_MANAGER_';
+
+  const projectId = process.env[`${PREFIX}FIREBASE_PROJECT_ID`];
+  const databaseURL = process.env[`${PREFIX}FIREBASE_DATABASE_URL`];
+  const clientEmail = process.env[`${PREFIX}FIREBASE_CLIENT_EMAIL`];
+  const privateKey  = process.env[`${PREFIX}FIREBASE_PRIVATE_KEY`];
+
+  if (projectId && databaseURL && clientEmail && privateKey) {
+    serviceAccountConfig = {
+      project_id:   projectId,
+      client_email: clientEmail,
+      // Support escaped newlines (stored as single-line env value)
+      private_key:  privateKey.replace(/\\n/g, '\n'),
+      databaseURL,
+    };
+    return serviceAccountConfig;
+  }
+
+  const base64Env = process.env[`${PREFIX}FIREBASE_SERVICE_ACCOUNT_BASE64`];
+  if (base64Env) {
+    try {
+      const parsed = JSON.parse(Buffer.from(base64Env, 'base64').toString('utf8')) as ServiceAccount;
+      for (const field of ['project_id', 'client_email', 'private_key', 'databaseURL'] as const) {
+        if (!parsed[field]) throw new Error(`Missing field: ${field}`);
+      }
+      serviceAccountConfig = parsed;
+      return serviceAccountConfig;
+    } catch (e: any) {
+      throw new Error(`Failed to parse ${PREFIX}FIREBASE_SERVICE_ACCOUNT_BASE64: ${e.message}`);
+    }
+  }
+
+  const jsonEnv = process.env[`${PREFIX}FIREBASE_SERVICE_ACCOUNT_JSON`];
+  if (jsonEnv) {
+    try {
+      const parsed = JSON.parse(jsonEnv) as ServiceAccount;
+      for (const field of ['project_id', 'client_email', 'private_key', 'databaseURL'] as const) {
+        if (!parsed[field]) throw new Error(`Missing field: ${field}`);
+      }
+      serviceAccountConfig = parsed;
+      return serviceAccountConfig;
+    } catch (e: any) {
+      throw new Error(`Failed to parse ${PREFIX}FIREBASE_SERVICE_ACCOUNT_JSON: ${e.message}`);
+    }
+  }
+
+  // ── Priority 3: file path (local dev only) ────────────────────────────────
+  const envPath = process.env[`${PREFIX}FIREBASE_SERVICE_ACCOUNT_PATH`];
+  if (!envPath) {
+    throw new Error(
+      `Firebase Admin credentials not configured. Provide ${PREFIX}FIREBASE_CLIENT_EMAIL + ${PREFIX}FIREBASE_PRIVATE_KEY, ` +
+      `${PREFIX}FIREBASE_SERVICE_ACCOUNT_JSON, or ${PREFIX}FIREBASE_SERVICE_ACCOUNT_PATH.`
+    );
+  }
+
+  const path = resolve(process.cwd(), /*turbopackIgnore: true*/ envPath);
   if (!existsSync(path)) {
     throw new Error(`Firebase Service Account JSON file not found at path: ${path}`);
   }
@@ -94,7 +145,7 @@ export async function firebaseAdminFetch(path: string, options: RequestInit = {}
   const url = `${databaseUrl}/${path.replace(/^\//, '')}`;
   const headers = {
     ...options.headers,
-    'Authorization': `Bearer ${token}`,
+    Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
   };
 

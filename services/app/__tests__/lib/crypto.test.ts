@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 describe('crypto helpers', () => {
   beforeEach(() => {
     vi.resetModules();
-    process.env.NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_ENCRYPT_SALT = 'test-salt-that-is-long-enough-for-suite';
+    process.env.DPDNS_CLOUDFLARED_MANAGER_ENCRYPT_SALT = 'test-salt-that-is-long-enough-for-suite';
   });
 
   it('encrypts and decrypts using salt plus uid', async () => {
@@ -26,8 +26,8 @@ describe('crypto helpers', () => {
   });
 
   it('throws when encryption salt is missing', async () => {
-    delete process.env.NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_ENCRYPT_SALT;
+    delete process.env.DPDNS_CLOUDFLARED_MANAGER_ENCRYPT_SALT;
     const { encrypt } = await import('@/lib/crypto');
-    expect(() => encrypt('secret', 'uid-123')).toThrow('NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_ENCRYPT_SALT is missing');
+    expect(() => encrypt('secret', 'uid-123')).toThrow('DPDNS_CLOUDFLARED_MANAGER_ENCRYPT_SALT is missing');
   });
 });

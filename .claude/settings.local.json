@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(npm --prefix services/app run typecheck)",
+      "PowerShell(npm --prefix services/app ci)"
+    ]
+  }
+}

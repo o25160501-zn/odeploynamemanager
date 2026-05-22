@@ -1,5 +1,5 @@
 @dpdnsBaseUrl = https://domain-api.digitalplat.org/api/v1
-@appBaseUrl = {{$dotenv NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_APP_URL}}
+@appBaseUrl = {{$dotenv DPDNS_CLOUDFLARED_MANAGER_APP_URL}}
 @dpdnsToken = {{$dotenv DPDNS_CLOUDFLARED_MANAGER_DPDNS_TEST_TOKEN}}
 @testDomain = {{$dotenv DPDNS_CLOUDFLARED_MANAGER_DPDNS_TEST_DOMAIN}}
 @slotType = {{$dotenv DPDNS_CLOUDFLARED_MANAGER_DPDNS_TEST_SLOT_TYPE}}

@@ -1,9 +1,9 @@
 import CryptoJS from 'crypto-js';
 
 const getKey = (uid: string) => {
-  const salt = process.env.NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_ENCRYPT_SALT;
+  const salt = process.env.DPDNS_CLOUDFLARED_MANAGER_ENCRYPT_SALT;
   if (!salt) {
-    throw new Error('NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_ENCRYPT_SALT is missing');
+    throw new Error('DPDNS_CLOUDFLARED_MANAGER_ENCRYPT_SALT is missing');
   }
   return `${salt}:${uid}`;
 };
