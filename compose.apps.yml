@@ -6,7 +6,7 @@
 #
 #  Minimal required env:
 #    APP_PORT   — Port app listens on inside container (default 3000)
-#    PROJECT_NAME, DOMAIN, CADDY_EMAIL, TINYAUTH_*, LITESTREAM_*
+#    PROJECT_NAME, DOMAIN, CADDY_EMAIL, LITESTREAM_*
 #    NEXT_PUBLIC_DPDNS_CLOUDFLARED_MANAGER_FIREBASE_*  — Firebase config (build args)
 # ================================================================
 
@@ -41,26 +41,17 @@ services:
       - ./services/app/-gitignore:/app/-gitignore:ro
     labels:
       # Public HTTP sites behind Cloudflare Tunnel.
+      # Auth handled internally by the app (Google Firebase) — no Tinyauth forward_auth.
       - "caddy=http://${PROJECT_NAME}.${DOMAIN}, http://main.${DOMAIN}, http://${DOMAIN}, http://${PROJECT_NAME_TAILSCALE}.${TAILSCALE_TAILNET_DOMAIN}"
-      - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
-      - "caddy.forward_auth.uri=/api/auth/caddy"
-      - "caddy.forward_auth.header_up=X-Forwarded-Proto https"
-      - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
       - "caddy.reverse_proxy={{upstreams ${APP_PORT:-3000}}}"
       # Internal HTTPS site for Tailscale / trusted LAN access.
       - "caddy_1=https://${PROJECT_NAME_TAILSCALE:-myapp}.${TAILSCALE_TAILNET_DOMAIN:-tailnet.local}"
       - "caddy_1.tls=internal"
-      - "caddy_1.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
-      - "caddy_1.forward_auth.uri=/api/auth/caddy"
-      - "caddy_1.forward_auth.header_up=X-Forwarded-Proto https"
-      - "caddy_1.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
       - "caddy_1.reverse_proxy={{upstreams ${APP_PORT:-3000}}}"
     networks: [app_net]
     depends_on:
       litestream-restore:
         condition: service_completed_successfully
-      tinyauth:
-        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test:
