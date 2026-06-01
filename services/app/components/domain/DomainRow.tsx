@@ -13,7 +13,7 @@ export function DomainRow({ domain, onEdit, onDelete }: { domain: DomainRecord; 
   const associatedAccount = accounts.find(acc => acc.id === domain.credentialAccountId);
   
   const copyNameservers = async () => {
-    await navigator.clipboard.writeText(domain.cloudflare.nameservers.join('\n'));
+    await navigator.clipboard.writeText(domain.cloudflare?.nameservers?.join('\n') || '');
   };
 
   const ageInDays = Math.floor((Date.now() - domain.created_at) / (1000 * 60 * 60 * 24));
@@ -50,7 +50,7 @@ export function DomainRow({ domain, onEdit, onDelete }: { domain: DomainRecord; 
           </p>
           {domain.notes ? <p className="mt-2 max-w-2xl text-sm text-body">{domain.notes}</p> : null}
           <div className="mt-3 flex flex-wrap gap-2">
-            {domain.cloudflare.nameservers.map((ns) => (
+            {domain.cloudflare?.nameservers?.map((ns) => (
               <code key={ns} className="rounded-pill bg-surface-soft px-3 py-1 font-mono text-xs text-body">
                 {ns}
               </code>

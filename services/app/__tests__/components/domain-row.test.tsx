@@ -37,4 +37,29 @@ describe('DomainRow', () => {
     expect(onEdit).toHaveBeenCalledTimes(1);
     expect(onDelete).toHaveBeenCalledTimes(1);
   });
+
+  it('renders domain successfully when cloudflare field is missing or partial', async () => {
+    const onEdit = vi.fn();
+    const onDelete = vi.fn();
+    const incompleteDomain: DomainRecord = {
+      name: 'manual',
+      namespace: '.dpdns.org',
+      fqdn: 'manual.dpdns.org',
+      // cloudflare field is missing (added manually)
+      dpdns: { registered: true },
+      status: 'active',
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    } as any;
+
+    render(<DomainRow domain={incompleteDomain} onEdit={onEdit} onDelete={onDelete} />);
+
+    expect(screen.getByText('manual.dpdns.org')).toBeInTheDocument();
+    expect(screen.getByText('.dpdns.org')).toBeInTheDocument();
+    
+    // Copy nameservers should not crash and fallback to empty clipboard text
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+    fireEvent.click(screen.getByRole('button', { name: 'Copy nameservers' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(''));
+  });
 });

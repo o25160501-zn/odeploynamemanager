@@ -46,43 +46,138 @@ export default function DashboardPage() {
     });
   }, [domains, search, selectedAccountId, selectedNamespace]);
 
-  // Sync Expiry Dates Logic
-  const syncAllExpiryDates = async (force = false) => {
+  // Sync all domain data from DPDNS API & Cloudflare API (expiry_date, status, nameservers, slot_type, created_at, zone_id)
+  const syncFromApi = async (force = false) => {
     if (!user || accounts.length === 0 || isSyncing) return;
     setIsSyncing(true);
     let updatedCount = 0;
     
     try {
       for (const account of accounts) {
-        if (!account.dpdnsToken) continue;
-        try {
-          const res = await DPDNSService.listDomains(account.dpdnsToken);
-          if (res.success && Array.isArray(res.data)) {
-            for (const apiDomain of (res.data as any[])) {
-              if (apiDomain.name && apiDomain.expiry_date) {
-                // Find matching domain record in firebase
-                const localDomain = domains.find((d) => d.fqdn === apiDomain.name);
-                if (localDomain && localDomain.expiry_date !== apiDomain.expiry_date) {
-                  await FirebaseService.updateDomain(user.uid, localDomain.fqdn, {
-                    expiry_date: apiDomain.expiry_date,
-                  });
-                  updatedCount++;
-                }
+        // Fetch DPDNS domains
+        let dpdnsDomains: any[] = [];
+        if (account.dpdnsToken) {
+          try {
+            const res = await DPDNSService.listDomains(account.dpdnsToken);
+            if (res.success && Array.isArray(res.data)) {
+              dpdnsDomains = res.data;
+            }
+          } catch (err) {
+            console.error(`Failed to sync DPDNS domains for account ${account.name}`, err);
+          }
+        }
+
+        // Fetch Cloudflare zones
+        let cfZones: any[] = [];
+        if (account.cloudflareEmail && account.cloudflareApiKey) {
+          try {
+            const cfRes = await CloudflareService.getZones(
+              account.cloudflareEmail,
+              account.cloudflareApiKey
+            );
+            if (cfRes.success && Array.isArray(cfRes.result)) {
+              cfZones = cfRes.result;
+            }
+          } catch (cfErr) {
+            console.error(`Failed to fetch Cloudflare zones for account ${account.name}`, cfErr);
+          }
+        }
+
+        // Identify local domains managed by this account
+        const accountDomains = domains.filter((d) => d.credentialAccountId === account.id);
+        
+        for (const localDomain of accountDomains) {
+          const updates: Record<string, any> = {};
+
+          // 1. Sync from matching DPDNS domain
+          const apiDomain = dpdnsDomains.find((d) => d.name === localDomain.fqdn);
+          if (apiDomain) {
+            if (apiDomain.expiry_date && localDomain.expiry_date !== apiDomain.expiry_date) {
+              updates.expiry_date = apiDomain.expiry_date;
+            }
+
+            // Sync DPDNS status → map 'ok' to 'active'
+            const mappedStatus = apiDomain.status === 'ok' ? 'active' : apiDomain.status;
+            if (mappedStatus && localDomain.status !== mappedStatus) {
+              updates.status = mappedStatus;
+            }
+
+            // Sync nameservers if changed
+            if (Array.isArray(apiDomain.nameservers) && apiDomain.nameservers.length > 0) {
+              const localNs = localDomain.cloudflare?.nameservers ?? [];
+              const apiNs: string[] = apiDomain.nameservers;
+              const nsChanged =
+                localNs.length !== apiNs.length ||
+                apiNs.some((ns: string, i: number) => ns !== localNs[i]);
+              if (nsChanged) {
+                updates.cloudflare = {
+                  ...(updates.cloudflare || localDomain.cloudflare || {}),
+                  nameservers: apiNs,
+                };
+              }
+            }
+
+            // Sync slot_type into dpdns field
+            if (apiDomain.slot_type && (localDomain.dpdns as any)?.slot_type !== apiDomain.slot_type) {
+              updates.dpdns = {
+                ...(localDomain.dpdns ?? {}),
+                slot_type: apiDomain.slot_type,
+                registered: true,
+              };
+            }
+
+            // Sync created_at from DPDNS API if available
+            const apiCreated = apiDomain.created_at || apiDomain.created_on || apiDomain.created;
+            if (apiCreated) {
+              const parsedTime = typeof apiCreated === 'number' ? apiCreated : Date.parse(apiCreated);
+              if (!isNaN(parsedTime) && localDomain.created_at !== parsedTime) {
+                updates.created_at = parsedTime;
               }
             }
           }
-        } catch (err) {
-          console.error(`Failed to sync expiry for account ${account.name}`, err);
+
+          // 2. Sync from matching Cloudflare zone
+          const cfZone = cfZones.find(
+            (z) => z.name === localDomain.fqdn || (localDomain.cloudflare?.zone_id && z.id === localDomain.cloudflare.zone_id)
+          );
+          if (cfZone) {
+            // Update zone_id if missing or different
+            if (cfZone.id && localDomain.cloudflare?.zone_id !== cfZone.id) {
+              updates.cloudflare = {
+                ...(updates.cloudflare || localDomain.cloudflare || {}),
+                zone_id: cfZone.id,
+              };
+            }
+
+            // Sync created_at from Cloudflare zone created_on
+            const cfCreated = cfZone.created_on;
+            if (cfCreated) {
+              const parsedTime = Date.parse(cfCreated);
+              if (!isNaN(parsedTime) && localDomain.created_at !== parsedTime) {
+                updates.created_at = parsedTime;
+              }
+            }
+          }
+
+          if (Object.keys(updates).length > 0) {
+            await FirebaseService.updateDomain(user.uid, localDomain.fqdn, updates as any);
+            updatedCount++;
+          }
         }
       }
-      localStorage.setItem(`last_expiry_sync_${user.uid}`, Date.now().toString());
+      localStorage.setItem(`last_api_sync_${user.uid}`, Date.now().toString());
       if (force) {
-        notifySuccess('Sync Expiry Dates', `Synchronized successfully. Updated ${updatedCount} domains.`);
+        notifySuccess(
+          'Sync from API',
+          updatedCount > 0
+            ? `Synchronized successfully. Updated ${updatedCount} domain${updatedCount !== 1 ? 's' : ''}.`
+            : 'All domains are already up to date.'
+        );
       }
     } catch (error) {
-      console.error('Error syncing domains expiry:', error);
+      console.error('Error syncing from DPDNS API:', error);
       if (force) {
-        notifyError('Sync Expiry Dates', error);
+        notifyError('Sync from API', error);
       }
     } finally {
       setIsSyncing(false);
@@ -93,11 +188,11 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!user || accounts.length === 0 || domains.length === 0) return;
     
-    const lastSync = localStorage.getItem(`last_expiry_sync_${user.uid}`);
+    const lastSync = localStorage.getItem(`last_api_sync_${user.uid}`);
     const oneHour = 60 * 60 * 1000;
     
     if (!lastSync || Date.now() - parseInt(lastSync, 10) > oneHour) {
-      syncAllExpiryDates(false);
+      syncFromApi(false);
     }
   }, [user, accounts, domains.length]);
 
@@ -110,9 +205,9 @@ export default function DashboardPage() {
           <p className="mt-2 text-body">Realtime list sorted by newest registration first.</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Button variant="secondary" onClick={() => syncAllExpiryDates(true)} disabled={isSyncing || !accounts.length}>
+          <Button variant="secondary" onClick={() => syncFromApi(true)} disabled={isSyncing || !accounts.length}>
             <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
-            {isSyncing ? 'Syncing...' : 'Sync Expiry'}
+            {isSyncing ? 'Syncing...' : 'Sync from API'}
           </Button>
           <Button onClick={() => setRegisterOpen(true)}>
             <Plus className="mr-2 h-5 w-5" /> Register New Domain

@@ -42,7 +42,7 @@ export function ConfirmDeleteDialog({ domain, open, onOpenChange }: { domain: Do
         if (activeAccount.dpdnsToken) {
           await DPDNSService.deleteDomain(activeAccount.dpdnsToken, domain.fqdn);
         }
-        if (deleteCf && activeAccount.cloudflareEmail && activeAccount.cloudflareApiKey && domain.cloudflare.zone_id) {
+        if (deleteCf && activeAccount.cloudflareEmail && activeAccount.cloudflareApiKey && domain.cloudflare?.zone_id) {
           await CloudflareService.deleteZone(activeAccount.cloudflareEmail, activeAccount.cloudflareApiKey, domain.cloudflare.zone_id);
         }
       } else if (selectedAccountId !== 'firebase_only') {

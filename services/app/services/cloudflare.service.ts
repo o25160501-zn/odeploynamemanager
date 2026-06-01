@@ -21,6 +21,7 @@ export interface CloudflareZoneResult {
   name: string;
   name_servers: string[];
   status: string;
+  created_on?: string;
 }
 
 export interface CloudflareAccountResult {
