@@ -101,4 +101,63 @@ describe('CredentialsForm', () => {
       }, { dpdns: false, cloudflare: true });
     });
   });
+
+  it('parses valid JSON config from quick import and fills the form', async () => {
+    render(<CredentialsForm />);
+
+    // Go to Add mode
+    fireEvent.click(screen.getAllByRole('button', { name: /Add Account/i })[0]);
+
+    // Check that we have the quick import textarea
+    const textarea = screen.getByPlaceholderText(/Dán chuỗi cấu hình ở đây/);
+    expect(textarea).toBeInTheDocument();
+
+    // NOTE: Use clearly fake placeholder keys — never put real secrets in test files
+    const FAKE_DPDNS_TOKEN = 'dp_live_FAKE_TEST_TOKEN_FOR_UNIT_TEST_ONLY';
+    const FAKE_CF_API_KEY = 'cfk_FAKE_TEST_API_KEY_FOR_UNIT_TEST_ONLY_00000000000';
+    const TEST_EMAIL = 'test-account@example-test.invalid';
+
+    const jsonInput = JSON.stringify({
+      email: TEST_EMAIL,
+      userExtras: [
+        { key: 'dpdns.apikey', value: FAKE_DPDNS_TOKEN },
+        { key: 'cloudflare.token.global', value: FAKE_CF_API_KEY },
+      ],
+    });
+
+    fireEvent.change(textarea, { target: { value: jsonInput } });
+    fireEvent.click(screen.getByRole('button', { name: 'Trích xuất & Điền tự động' }));
+
+    // Check that fields were populated
+    expect(screen.getByPlaceholderText('e.g. Personal DPDNS Account')).toHaveValue('test-account'); // derived from email prefix
+    expect(screen.getByPlaceholderText('dp_live_xxxxx')).toHaveValue(FAKE_DPDNS_TOKEN);
+    expect(screen.getByPlaceholderText('user@example.com')).toHaveValue(TEST_EMAIL);
+    expect(screen.getByPlaceholderText('37-character global API key')).toHaveValue(FAKE_CF_API_KEY);
+  });
+
+  it('parses unstructured plain text from quick import and fills the form', async () => {
+    render(<CredentialsForm />);
+
+    // Go to Add mode
+    fireEvent.click(screen.getAllByRole('button', { name: /Add Account/i })[0]);
+
+    const textarea = screen.getByPlaceholderText(/Dán chuỗi cấu hình ở đây/);
+
+    const plainTextInput = `
+      Some random text here
+      email: test@example.com
+      dpdns.apikey = dp_live_abcdef123
+      cloudflare.token.global cfk_api_key_12345
+      cloudflare.account_id = cf_acc_id_xyz
+    `;
+
+    fireEvent.change(textarea, { target: { value: plainTextInput } });
+    fireEvent.click(screen.getByRole('button', { name: 'Trích xuất & Điền tự động' }));
+
+    expect(screen.getByPlaceholderText('e.g. Personal DPDNS Account')).toHaveValue('test');
+    expect(screen.getByPlaceholderText('dp_live_xxxxx')).toHaveValue('dp_live_abcdef123');
+    expect(screen.getByPlaceholderText('user@example.com')).toHaveValue('test@example.com');
+    expect(screen.getByPlaceholderText('37-character global API key')).toHaveValue('cfk_api_key_12345');
+    expect(screen.getByPlaceholderText('Auto-detect if blank')).toHaveValue('cf_acc_id_xyz');
+  });
 });

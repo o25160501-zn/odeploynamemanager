@@ -20,8 +20,140 @@ import { useEffect, useMemo, useState } from 'react';
 import { useFloatMessage } from '@/components/feedback/FloatMessageProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { MaskedInput } from '@/components/credentials/MaskedInput';
 import { credentialsSchema, type CredentialsFormValues } from '@/lib/validators';
+
+interface ParsedValues {
+  name?: string;
+  description?: string;
+  dpdnsToken?: string;
+  cloudflareEmail?: string;
+  cloudflareApiKey?: string;
+  cloudflareAccountId?: string;
+}
+
+export const parseCredentialsText = (text: string): ParsedValues => {
+  const result: ParsedValues = {};
+  if (!text) return result;
+
+  // 1. Try parsing as JSON first
+  try {
+    const cleanText = text.trim();
+    if ((cleanText.startsWith('{') && cleanText.endsWith('}')) || 
+        (cleanText.startsWith('[') && cleanText.endsWith(']'))) {
+      const parsed = JSON.parse(cleanText);
+      
+      if (parsed && typeof parsed === 'object') {
+        let extras: Array<{ key?: string; value?: any }> = [];
+        if (Array.isArray(parsed)) {
+          extras = parsed;
+        } else {
+          if (parsed.email) result.cloudflareEmail = String(parsed.email);
+          if (parsed.cloudflareEmail) result.cloudflareEmail = String(parsed.cloudflareEmail);
+          if (parsed.cloudflareApiKey) result.cloudflareApiKey = String(parsed.cloudflareApiKey);
+          if (parsed.cloudflareAccountId) result.cloudflareAccountId = String(parsed.cloudflareAccountId);
+          if (parsed.dpdnsToken) result.dpdnsToken = String(parsed.dpdnsToken);
+          if (parsed.name) result.name = String(parsed.name);
+          if (parsed.description) result.description = String(parsed.description);
+          
+          if (Array.isArray(parsed.userExtras)) {
+            extras = parsed.userExtras;
+          }
+        }
+        
+        for (const item of extras) {
+          if (item && typeof item === 'object' && 'key' in item && 'value' in item) {
+            const k = String(item.key).trim();
+            const v = String(item.value).trim();
+            
+            if (k === 'dpdns.apikey' || k === 'dpdns.token') {
+              result.dpdnsToken = v;
+            } else if (k === 'cloudflare.token.global' || k === 'cloudflare.apikey' || k === 'cloudflare.api_key' || k === 'cloudflare.token') {
+              result.cloudflareApiKey = v;
+            } else if (k === 'email' || k === 'cloudflare.email') {
+              result.cloudflareEmail = v;
+            } else if (k === 'cloudflare.account_id' || k === 'cloudflare.accountId') {
+              result.cloudflareAccountId = v;
+            }
+          }
+        }
+        
+        if (Object.keys(result).length > 0) {
+          return result;
+        }
+      }
+    }
+  } catch (e) {
+    // Fail silently and proceed to regex
+  }
+
+  // 2. Regex parsing (Fallback for non-JSON or malformed JSON)
+  // Check key-value blocks e.g. "key": "dpdns.apikey", "value": "dp_live_xxx"
+  const keyValBlockRegex = /["']key["']\s*:\s*["']([^"']+)["']\s*,\s*["']value["']\s*:\s*["']([^"']+)["']/g;
+  let match;
+  while ((match = keyValBlockRegex.exec(text)) !== null) {
+    const k = match[1].trim();
+    const v = match[2].trim();
+    if (k === 'dpdns.apikey' || k === 'dpdns.token') {
+      result.dpdnsToken = v;
+    } else if (k === 'cloudflare.token.global' || k === 'cloudflare.apikey' || k === 'cloudflare.api_key' || k === 'cloudflare.token') {
+      result.cloudflareApiKey = v;
+    } else if (k === 'email' || k === 'cloudflare.email') {
+      result.cloudflareEmail = v;
+    } else if (k === 'cloudflare.account_id' || k === 'cloudflare.accountId') {
+      result.cloudflareAccountId = v;
+    }
+  }
+
+  const findValueWithRegex = (keys: string[]): string | undefined => {
+    for (const key of keys) {
+      const escapedKey = key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+      const regex = new RegExp(`["']?${escapedKey}["']?\\s*[:=\\s]\\s*["']?([^"'\\r\\n,\\t\\s]+)["']?`, 'i');
+      const m = text.match(regex);
+      if (m && m[1]) {
+        return m[1].trim();
+      }
+    }
+    return undefined;
+  };
+
+  const email = findValueWithRegex(['cloudflareEmail', 'cloudflare_email', 'email']);
+  if (email) result.cloudflareEmail = email;
+
+  const dpdnsToken = findValueWithRegex(['dpdnsToken', 'dpdns_token', 'dpdns.apikey', 'dpdns.token', 'dpdns']);
+  if (dpdnsToken) result.dpdnsToken = dpdnsToken;
+
+  const cfApiKey = findValueWithRegex(['cloudflareApiKey', 'cloudflare_api_key', 'cloudflare.token.global', 'cloudflare.apikey', 'cloudflare.token', 'cloudflare']);
+  if (cfApiKey) result.cloudflareApiKey = cfApiKey;
+
+  const cfAccountId = findValueWithRegex(['cloudflareAccountId', 'cloudflare_account_id', 'cloudflare.account_id']);
+  if (cfAccountId) result.cloudflareAccountId = cfAccountId;
+
+  const name = findValueWithRegex(['name', 'friendlyName', 'accountName']);
+  if (name) result.name = name;
+
+  const desc = findValueWithRegex(['description', 'desc']);
+  if (desc) result.description = desc;
+
+  // 3. Absolute Fallbacks
+  if (!result.dpdnsToken) {
+    const dpdnsMatch = text.match(/(dp_live_[a-zA-Z0-9]+)/);
+    if (dpdnsMatch) result.dpdnsToken = dpdnsMatch[1];
+  }
+
+  if (!result.cloudflareApiKey) {
+    const cfkMatch = text.match(/(cfk_[a-zA-Z0-9]+)/);
+    if (cfkMatch) result.cloudflareApiKey = cfkMatch[1];
+  }
+
+  if (!result.cloudflareEmail) {
+    const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    if (emailMatch) result.cloudflareEmail = emailMatch[0];
+  }
+
+  return result;
+};
 import { toErrorMessage, formatDateYYYYMMDD } from '@/lib/utils';
 import { CloudflareService } from '@/services/cloudflare.service';
 import { CredentialsService } from '@/services/credentials.service';
@@ -50,6 +182,7 @@ export function CredentialsForm({
   // Mode state: 'list' | 'add' | 'edit'
   const [mode, setMode] = useState<'list' | 'add' | 'edit'>('list');
   const [editingAccount, setEditingAccount] = useState<DecryptedCredentialAccount | null>(null);
+  const [quickImportText, setQuickImportText] = useState('');
 
   const [dpdnsStatus, setDpdnsStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [cfStatus, setCfStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -126,6 +259,7 @@ export function CredentialsForm({
   const enterAddMode = () => {
     setMode('add');
     setEditingAccount(null);
+    setQuickImportText('');
     form.reset({
       name: '',
       description: '',
@@ -142,6 +276,7 @@ export function CredentialsForm({
   const enterEditMode = (account: DecryptedCredentialAccount) => {
     setMode('edit');
     setEditingAccount(account);
+    setQuickImportText('');
     form.reset({
       name: account.name,
       description: account.description || '',
@@ -158,10 +293,68 @@ export function CredentialsForm({
   const exitToListView = async () => {
     setMode('list');
     setEditingAccount(null);
+    setQuickImportText('');
     if (user) {
       // Reload accounts from DB to ensure local sync
       const freshAccounts = await CredentialsService.load(user.uid);
       setAccounts(freshAccounts);
+    }
+  };
+
+  const applyQuickImport = () => {
+    if (!quickImportText.trim()) return;
+
+    try {
+      const parsed = parseCredentialsText(quickImportText);
+      const foundFields: string[] = [];
+
+      if (parsed.name) {
+        form.setValue('name', parsed.name);
+        foundFields.push('Friendly Name');
+      } else if (parsed.cloudflareEmail) {
+        const prefix = parsed.cloudflareEmail.split('@')[0];
+        form.setValue('name', prefix);
+        foundFields.push('Friendly Name (từ Email)');
+      }
+
+      if (parsed.description) {
+        form.setValue('description', parsed.description);
+        foundFields.push('Description');
+      }
+
+      if (parsed.dpdnsToken) {
+        form.setValue('dpdnsToken', parsed.dpdnsToken);
+        foundFields.push('DPDNS Token');
+      }
+
+      if (parsed.cloudflareEmail) {
+        form.setValue('cloudflareEmail', parsed.cloudflareEmail);
+        foundFields.push('Cloudflare Email');
+      }
+
+      if (parsed.cloudflareApiKey) {
+        form.setValue('cloudflareApiKey', parsed.cloudflareApiKey);
+        foundFields.push('Cloudflare Global API Key');
+      }
+
+      if (parsed.cloudflareAccountId) {
+        form.setValue('cloudflareAccountId', parsed.cloudflareAccountId);
+        foundFields.push('Cloudflare Account ID');
+      }
+
+      if (foundFields.length > 0) {
+        notifySuccess(
+          'Quick Import',
+          `Đã tự động điền các trường: ${foundFields.join(', ')}`
+        );
+      } else {
+        notifyError(
+          'Quick Import',
+          new Error('Không tìm thấy thông tin cấu hình hợp lệ (Email, DPDNS Token, hay Cloudflare API Key) trong chuỗi đã dán.')
+        );
+      }
+    } catch (err) {
+      notifyError('Quick Import', err);
     }
   };
 
@@ -697,6 +890,36 @@ export function CredentialsForm({
             <p className="text-sm text-body">Provide connection details for your DPDNS and Cloudflare credentials.</p>
           </div>
         </div>
+
+        <section className="feature-card border border-primary/20 bg-primary/5">
+          <div className="flex flex-col gap-1">
+            <h3 className="text-lg font-semibold text-primary flex items-center gap-2">
+              <span>⚡ Nhập nhanh cấu hình (Quick Import)</span>
+            </h3>
+            <p className="text-xs text-body">
+              Dán chuỗi cấu hình (định dạng JSON hoặc dạng văn bản chứa key-value) vào ô bên dưới. Hệ thống sẽ tự động tìm kiếm các trường tương ứng (Email, DPDNS Token, Cloudflare Global API Key, Account ID...) và điền vào form.
+            </p>
+          </div>
+          <div className="mt-4 space-y-3">
+            <Textarea
+              placeholder={`Dán chuỗi cấu hình ở đây...\nVí dụ:\n{\n  "email": "user@example.com",\n  "userExtras": [\n    { "key": "dpdns.apikey", "value": "dp_live_xxxx" },\n    { "key": "cloudflare.token.global", "value": "cfk_xxxx" }\n  ]\n}`}
+              value={quickImportText}
+              onChange={(e) => setQuickImportText(e.target.value)}
+              className="font-mono text-xs bg-canvas/50 min-h-24"
+            />
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={applyQuickImport}
+                disabled={!quickImportText.trim()}
+                className="text-xs h-9"
+              >
+                Trích xuất & Điền tự động
+              </Button>
+            </div>
+          </div>
+        </section>
 
         <section className="feature-card">
           <h3 className="text-lg font-semibold text-ink mb-4">Account Label</h3>
