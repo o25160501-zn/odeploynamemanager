@@ -203,20 +203,51 @@ export function CredentialsForm({
     setMessage('');
     setDpdnsStatus('idle');
     setCfStatus('idle');
+
+    let dpdnsOk = false;
+    let cfOk = false;
+    let resolvedAccountId = values.cloudflareAccountId || '';
+    const errorMsgs: string[] = [];
+
+    // Step 1: Verify DPDNS Token
     try {
-      // Step 1: Verify DPDNS Token
       await DPDNSService.listDomains(values.dpdnsToken);
       setDpdnsStatus('success');
+      dpdnsOk = true;
+    } catch (error) {
+      setDpdnsStatus('error');
+      errorMsgs.push(`DPDNS: ${toErrorMessage(error, 'Token không hợp lệ')}`);
+    }
 
-      // Step 2: Verify Cloudflare
+    // Step 2: Verify Cloudflare
+    try {
       await CloudflareService.verifyCredentials(values.cloudflareEmail, values.cloudflareApiKey);
-      const resolvedAccountId = await CloudflareService.resolveAccountId(
+      resolvedAccountId = await CloudflareService.resolveAccountId(
         values.cloudflareEmail,
         values.cloudflareApiKey,
         values.cloudflareAccountId
       );
       setCfStatus('success');
+      cfOk = true;
+    } catch (error) {
+      setCfStatus('error');
+      errorMsgs.push(`Cloudflare: ${toErrorMessage(error, 'Credentials are invalid')}`);
+    }
 
+    if (!dpdnsOk || !cfOk) {
+      const combinedError = errorMsgs.join(' | ');
+      setMessage(combinedError);
+      setConfirmSaveError({
+        open: true,
+        values,
+        dpdnsOk,
+        cfOk,
+        errorMessage: combinedError,
+      });
+      return;
+    }
+
+    try {
       // Step 3: Encrypt and save account to Firebase
       const accountData: Omit<DecryptedCredentialAccount, 'created_at' | 'updated_at'> & { created_at?: number } = {
         id: editingAccount?.id || '', // Service will generate ID if blank
@@ -243,10 +274,70 @@ export function CredentialsForm({
     }
   };
 
+  const saveWithErrors = async () => {
+    if (!user || !confirmSaveError.values) return;
+    const { values, dpdnsOk, cfOk } = confirmSaveError;
+
+    try {
+      let resolvedAccountId = values.cloudflareAccountId || '';
+
+      if (cfOk) {
+        try {
+          resolvedAccountId = await CloudflareService.resolveAccountId(
+            values.cloudflareEmail,
+            values.cloudflareApiKey,
+            values.cloudflareAccountId
+          );
+        } catch (e) {
+          // Ignore error since we are in save with errors mode
+        }
+      }
+
+      const accountData: Omit<DecryptedCredentialAccount, 'created_at' | 'updated_at'> & { created_at?: number } = {
+        id: editingAccount?.id || '',
+        name: values.name,
+        description: values.description || '',
+        dpdnsToken: values.dpdnsToken,
+        cloudflareEmail: values.cloudflareEmail,
+        cloudflareApiKey: values.cloudflareApiKey,
+        cloudflareAccountId: resolvedAccountId,
+        dpdnsVerified: dpdnsOk,
+        cloudflareVerified: cfOk,
+      };
+      if (editingAccount?.created_at) {
+        accountData.created_at = editingAccount.created_at;
+      }
+
+      await CredentialsService.save(user.uid, accountData, { dpdns: dpdnsOk, cloudflare: cfOk });
+
+      notifySuccess('Settings · Save credentials', 'Account credentials saved (unverified services recorded).');
+      await exitToListView();
+    } catch (error) {
+      setMessage(toErrorMessage(error, 'Save failed'));
+      notifyError('Settings · Save credentials', error, [values.dpdnsToken, values.cloudflareApiKey]);
+    } finally {
+      setConfirmSaveError({ open: false, values: null, dpdnsOk: false, cfOk: false, errorMessage: '' });
+    }
+  };
+
   const [confirmDelete, setConfirmDelete] = useState<{
     open: boolean;
     accountId: string;
   }>({ open: false, accountId: '' });
+
+  const [confirmSaveError, setConfirmSaveError] = useState<{
+    open: boolean;
+    values: CredentialsFormValues | null;
+    dpdnsOk: boolean;
+    cfOk: boolean;
+    errorMessage: string;
+  }>({
+    open: false,
+    values: null,
+    dpdnsOk: false,
+    cfOk: false,
+    errorMessage: '',
+  });
 
   const deleteAccount = async (accountId: string) => {
     if (!user) return;
@@ -593,106 +684,118 @@ export function CredentialsForm({
   }
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-      <div className="flex items-center gap-4">
-        <Button type="button" variant="ghost" size="icon" onClick={exitToListView}>
-          <ArrowLeft className="h-5 w-5 text-body hover:text-ink" />
-        </Button>
-        <div>
-          <h2 className="text-xl font-semibold text-ink">
-            {mode === 'edit' ? `Edit Account: ${editingAccount?.name}` : 'Add New Credentials Account'}
-          </h2>
-          <p className="text-sm text-body">Provide connection details for your DPDNS and Cloudflare credentials.</p>
+    <>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        <div className="flex items-center gap-4">
+          <Button type="button" variant="ghost" size="icon" onClick={exitToListView}>
+            <ArrowLeft className="h-5 w-5 text-body hover:text-ink" />
+          </Button>
+          <div>
+            <h2 className="text-xl font-semibold text-ink">
+              {mode === 'edit' ? `Edit Account: ${editingAccount?.name}` : 'Add New Credentials Account'}
+            </h2>
+            <p className="text-sm text-body">Provide connection details for your DPDNS and Cloudflare credentials.</p>
+          </div>
         </div>
-      </div>
 
-      <section className="feature-card">
-        <h3 className="text-lg font-semibold text-ink mb-4">Account Label</h3>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-semibold text-ink">Friendly Account Name</label>
-            <Input className="mt-2" placeholder="e.g. Personal DPDNS Account" {...form.register('name')} />
-            {error.name ? <p className="mt-2 text-sm text-red-600">{error.name.message}</p> : null}
+        <section className="feature-card">
+          <h3 className="text-lg font-semibold text-ink mb-4">Account Label</h3>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-ink">Friendly Account Name</label>
+              <Input className="mt-2" placeholder="e.g. Personal DPDNS Account" {...form.register('name')} />
+              {error.name ? <p className="mt-2 text-sm text-red-600">{error.name.message}</p> : null}
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-ink">
+                Description / Diễn giải <span className="font-normal text-muted-soft">(Optional)</span>
+              </label>
+              <Input className="mt-2" placeholder="e.g. Tài khoản dùng cho project ABC..." {...form.register('description')} />
+              {error.description ? <p className="mt-2 text-sm text-red-600">{error.description.message}</p> : null}
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-semibold text-ink">
-              Description / Diễn giải <span className="font-normal text-muted-soft">(Optional)</span>
-            </label>
-            <Input className="mt-2" placeholder="e.g. Tài khoản dùng cho project ABC..." {...form.register('description')} />
-            {error.description ? <p className="mt-2 text-sm text-red-600">{error.description.message}</p> : null}
-          </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="feature-card">
-        <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-ink">DigitalPlat DPDNS</h2>
-            <p className="text-sm text-body">Bearer API token used to register and manage DPDNS domains.</p>
+        <section className="feature-card">
+          <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-ink">DigitalPlat DPDNS</h2>
+              <p className="text-sm text-body">Bearer API token used to register and manage DPDNS domains.</p>
+            </div>
+            {dpdnsStatus === 'success' ? <Status ok label="Connected" /> : dpdnsStatus === 'error' ? <Status label="Invalid token" /> : null}
           </div>
-          {dpdnsStatus === 'success' ? <Status ok label="Connected" /> : dpdnsStatus === 'error' ? <Status label="Invalid token" /> : null}
-        </div>
-        <label className="block text-sm font-semibold text-ink">DPDNS Token</label>
-        <div className="mt-2 flex flex-col gap-3 md:flex-row">
-          <MaskedInput placeholder="dp_live_xxxxx" {...form.register('dpdnsToken')} />
-          <Button type="button" variant="secondary" onClick={testDpdns} disabled={form.formState.isSubmitting}>
-            Test Connection
+          <label className="block text-sm font-semibold text-ink">DPDNS Token</label>
+          <div className="mt-2 flex flex-col gap-3 md:flex-row">
+            <MaskedInput placeholder="dp_live_xxxxx" {...form.register('dpdnsToken')} />
+            <Button type="button" variant="secondary" onClick={testDpdns} disabled={form.formState.isSubmitting}>
+              Test Connection
+            </Button>
+          </div>
+          {error.dpdnsToken ? <p className="mt-2 text-sm text-red-600">{error.dpdnsToken.message}</p> : null}
+        </section>
+
+        <section className="feature-card">
+          <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-ink">Cloudflare</h2>
+              <p className="text-sm text-body">Required to create Zones and manage nameservers dynamically.</p>
+            </div>
+            {cfStatus === 'success' ? <Status ok label="Connected" /> : cfStatus === 'error' ? <Status label="Invalid credentials" /> : null}
+          </div>
+
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            <div className="flex gap-2">
+              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>Cloudflare Global API Key grants broad access. Make sure your Firebase project is secure and rotate key if necessary.</p>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-5 md:grid-cols-2">
+            <div>
+              <label className="block text-sm font-semibold text-ink">Cloudflare Email</label>
+              <Input className="mt-2" placeholder="user@example.com" {...form.register('cloudflareEmail')} />
+              {error.cloudflareEmail ? <p className="mt-2 text-sm text-red-600">{error.cloudflareEmail.message}</p> : null}
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-ink">Cloudflare Account ID</label>
+              <Input className="mt-2 font-mono" placeholder="Auto-detect if blank" {...form.register('cloudflareAccountId')} />
+              {error.cloudflareAccountId ? <p className="mt-2 text-sm text-red-600">{error.cloudflareAccountId.message}</p> : null}
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-semibold text-ink">Cloudflare Global API Key</label>
+              <div className="mt-2 flex flex-col gap-3 md:flex-row">
+                <MaskedInput className="font-mono flex-1" placeholder="37-character global API key" {...form.register('cloudflareApiKey')} />
+                <Button type="button" variant="secondary" onClick={testCloudflare} disabled={form.formState.isSubmitting}>
+                  Test Cloudflare
+                </Button>
+              </div>
+              {error.cloudflareApiKey ? <p className="mt-2 text-sm text-red-600">{error.cloudflareApiKey.message}</p> : null}
+            </div>
+          </div>
+        </section>
+
+        {message ? <p className="rounded-lg border border-hairline bg-surface-soft p-4 text-sm text-body">{message}</p> : null}
+
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="secondary" onClick={exitToListView} disabled={form.formState.isSubmitting}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={form.formState.isSubmitting}>
+            {form.formState.isSubmitting ? 'Testing…' : 'Save & Test →'}
           </Button>
         </div>
-        {error.dpdnsToken ? <p className="mt-2 text-sm text-red-600">{error.dpdnsToken.message}</p> : null}
-      </section>
+      </form>
 
-      <section className="feature-card">
-        <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-ink">Cloudflare</h2>
-            <p className="text-sm text-body">Required to create Zones and manage nameservers dynamically.</p>
-          </div>
-          {cfStatus === 'success' ? <Status ok label="Connected" /> : cfStatus === 'error' ? <Status label="Invalid credentials" /> : null}
-        </div>
-
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          <div className="flex gap-2">
-            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-            <p>Cloudflare Global API Key grants broad access. Make sure your Firebase project is secure and rotate key if necessary.</p>
-          </div>
-        </div>
-
-        <div className="mt-6 grid gap-5 md:grid-cols-2">
-          <div>
-            <label className="block text-sm font-semibold text-ink">Cloudflare Email</label>
-            <Input className="mt-2" placeholder="user@example.com" {...form.register('cloudflareEmail')} />
-            {error.cloudflareEmail ? <p className="mt-2 text-sm text-red-600">{error.cloudflareEmail.message}</p> : null}
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-ink">Cloudflare Account ID</label>
-            <Input className="mt-2 font-mono" placeholder="Auto-detect if blank" {...form.register('cloudflareAccountId')} />
-            {error.cloudflareAccountId ? <p className="mt-2 text-sm text-red-600">{error.cloudflareAccountId.message}</p> : null}
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm font-semibold text-ink">Cloudflare Global API Key</label>
-            <div className="mt-2 flex flex-col gap-3 md:flex-row">
-              <MaskedInput className="font-mono flex-1" placeholder="37-character global API key" {...form.register('cloudflareApiKey')} />
-              <Button type="button" variant="secondary" onClick={testCloudflare} disabled={form.formState.isSubmitting}>
-                Test Cloudflare
-              </Button>
-            </div>
-            {error.cloudflareApiKey ? <p className="mt-2 text-sm text-red-600">{error.cloudflareApiKey.message}</p> : null}
-          </div>
-        </div>
-      </section>
-
-      {message ? <p className="rounded-lg border border-hairline bg-surface-soft p-4 text-sm text-body">{message}</p> : null}
-
-      <div className="flex justify-end gap-3">
-        <Button type="button" variant="secondary" onClick={exitToListView} disabled={form.formState.isSubmitting}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={form.formState.isSubmitting}>
-          {form.formState.isSubmitting ? 'Testing…' : 'Save & Test →'}
-        </Button>
-      </div>
-    </form>
+      <ConfirmDialog
+        open={confirmSaveError.open}
+        onOpenChange={(open) => setConfirmSaveError((prev) => ({ ...prev, open }))}
+        title="Lưu Credentials bị lỗi xác thực"
+        description={`Có lỗi xảy ra khi xác thực API: ${confirmSaveError.errorMessage}. Bạn có chắc chắn muốn lưu thông tin credentials này bất chấp lỗi kết nối không?`}
+        confirmLabel="Vẫn lưu"
+        cancelLabel="Hủy"
+        onConfirm={saveWithErrors}
+      />
+    </>
   );
 }
 

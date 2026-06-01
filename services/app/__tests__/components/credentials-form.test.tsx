@@ -64,4 +64,41 @@ describe('CredentialsForm', () => {
     await waitFor(() => expect(DPDNSService.listDomains).toHaveBeenCalledWith('dp-token'));
     expect(await screen.findByText('DPDNS connected successfully.')).toBeInTheDocument();
   });
+
+  it('shows verification error dialog when API fails, and saves with unverified status upon confirmation', async () => {
+    vi.mocked(DPDNSService.listDomains).mockRejectedValue(new Error('API rate limit exceeded'));
+    
+    render(<CredentialsForm />);
+
+    // Click Add Account first to enter the add mode form
+    fireEvent.click(screen.getAllByRole('button', { name: /Add Account/i })[0]);
+
+    fireEvent.change(screen.getByPlaceholderText('e.g. Personal DPDNS Account'), { target: { value: 'Failed API Account' } });
+    fireEvent.change(screen.getByPlaceholderText('dp_live_xxxxx'), { target: { value: 'dp-bad-token' } });
+    fireEvent.change(screen.getByPlaceholderText('user@example.com'), { target: { value: 'user@example.com' } });
+    fireEvent.change(screen.getByPlaceholderText('37-character global API key'), { target: { value: 'a'.repeat(37) } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save & Test →' }));
+
+    // Wait for the popup to show up
+    const dialogTitle = await screen.findByText('Lưu Credentials bị lỗi xác thực');
+    expect(dialogTitle).toBeInTheDocument();
+    expect(screen.getByText('DPDNS: API rate limit exceeded')).toBeInTheDocument();
+
+    // Click "Vẫn lưu" button
+    fireEvent.click(screen.getByRole('button', { name: 'Vẫn lưu' }));
+
+    await waitFor(() => {
+      expect(CredentialsService.save).toHaveBeenCalledWith('uid-1', {
+        id: '',
+        name: 'Failed API Account',
+        description: '',
+        dpdnsToken: 'dp-bad-token',
+        cloudflareEmail: 'user@example.com',
+        cloudflareApiKey: 'a'.repeat(37),
+        cloudflareAccountId: 'account-id',
+        dpdnsVerified: false,
+        cloudflareVerified: true,
+      }, { dpdns: false, cloudflare: true });
+    });
+  });
 });
