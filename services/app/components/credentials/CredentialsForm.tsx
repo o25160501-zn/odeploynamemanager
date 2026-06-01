@@ -308,8 +308,8 @@ export function CredentialsForm({
       const parsed = parseCredentialsText(quickImportText);
       const foundFields: string[] = [];
 
-      if (parsed.name) {
-        form.setValue('name', parsed.name);
+      if (parsed.cloudflareEmail ) {
+        form.setValue('name', parsed.cloudflareEmail);
         foundFields.push('Friendly Name');
       } else if (parsed.cloudflareEmail) {
         const prefix = parsed.cloudflareEmail.split('@')[0];
